@@ -1,0 +1,30 @@
+name: sonda-cve
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  sonda:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Baixa e mostra o formato (sem contar nada)
+        run: |
+          curl -fL -o cve.jsonl \
+            https://huggingface.co/datasets/ChipHolmes/All-CVE-Records-Training-Dataset-archive/resolve/main/all_cve_database.jsonl
+          wc -l cve.jsonl
+          python3 - <<'PY'
+          import json
+          with open("cve.jsonl", encoding="utf-8") as f:
+              for i, linha in enumerate(f):
+                  if i >= 2:
+                      break
+                  obj = json.loads(linha)
+                  print("CHAVES:", list(obj.keys()))
+                  for k, v in obj.items():
+                      print(f"  {k}: {str(v)[:160]!r}")
+                  print("---")
+          PY
