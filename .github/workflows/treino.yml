@@ -53,4 +53,6 @@ jobs:
           path: |
             resultados/
             contagens_mix.sqlite
+            pares_train_mix.jsonl
+            pares_teste.jsonl
           retention-days: 14
