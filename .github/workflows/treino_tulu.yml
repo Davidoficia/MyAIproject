@@ -1,0 +1,59 @@
+name: treino-tulu-personas-code
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  treino:
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Instala dependências
+        run: pip install pyarrow
+
+      - name: Baixa allenai/tulu-3-sft-personas-code
+        run: |
+          mkdir -p dados
+          curl -fL -o dados/tulu.parquet \
+            https://huggingface.co/datasets/allenai/tulu-3-sft-personas-code/resolve/main/data/train-00000-of-00001.parquet
+
+      - name: Gera pares a partir do tulu
+        env:
+          ARATG_PASTA: ${{ github.workspace }}
+        run: python prepara_tulu.py dados/tulu.parquet pares_train_mix.jsonl
+
+      - name: Contagem
+        env:
+          ARATG_PASTA: ${{ github.workspace }}
+        run: |
+          mkdir -p resultados
+          python conta_mix.py | tee resultados/conta.log
+
+      - name: Avalia no teste limpo (se o arquivo existir no repo)
+        env:
+          ARATG_PASTA: ${{ github.workspace }}
+        run: |
+          if [ -f teste/pares_test_limpo2.jsonl ]; then
+            ARATG_TESTE=$GITHUB_WORKSPACE/teste/pares_test_limpo2.jsonl python avalia_mix.py | tee resultados/avalia.log
+          else
+            echo "sem teste limpo no repo: avaliação pulada" | tee resultados/avalia.log
+          fi
+
+      - name: Guarda resultados
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: resultados-tulu
+          path: |
+            resultados/
+            contagens_mix.sqlite
+          retention-days: 14
