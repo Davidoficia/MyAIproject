@@ -1,0 +1,56 @@
+name: treino-contagem
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  treino:
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Baixa hh-rlhf (harmless, treino e teste)
+        run: |
+          mkdir -p hh
+          curl -fL -o hh/harmless_train.jsonl.gz \
+            https://huggingface.co/datasets/Anthropic/hh-rlhf/resolve/main/harmless-base/train.jsonl.gz
+          curl -fL -o hh/harmless_test.jsonl.gz \
+            https://huggingface.co/datasets/Anthropic/hh-rlhf/resolve/main/harmless-base/test.jsonl.gz
+
+      - name: Gera pares de treino a partir do hh
+        env:
+          ARATG_PASTA: ${{ github.workspace }}
+        run: |
+          python prepara_hh.py hh/harmless_train.jsonl.gz pares_train_mix.jsonl
+          python prepara_hh.py hh/harmless_test.jsonl.gz pares_teste.jsonl
+
+      - name: Contagem (retomável por checkpoint)
+        env:
+          ARATG_PASTA: ${{ github.workspace }}
+        run: |
+          mkdir -p resultados
+          python conta_mix.py | tee resultados/conta.log
+
+      - name: Avalia (palavra exata, teste hh, NÃO comparável ao teste limpo)
+        env:
+          ARATG_PASTA: ${{ github.workspace }}
+          ARATG_TESTE: ${{ github.workspace }}/pares_teste.jsonl
+        run: python avalia_mix.py | tee resultados/avalia.log
+
+      - name: Guarda resultados
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: resultados-treino
+          path: |
+            resultados/
+            contagens_mix.sqlite
+          retention-days: 14
