@@ -1,0 +1,67 @@
+name: treino-mix-cve
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  treino:
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Baixa ChipHolmes/All-CVE-Records (Apache-2.0)
+        run: |
+          mkdir -p baixados
+          curl -fL -o baixados/cve.jsonl \
+            https://huggingface.co/datasets/ChipHolmes/All-CVE-Records-Training-Dataset-archive/resolve/main/all_cve_database.jsonl
+
+      - name: Monta a mistura (CVE + nossos 19 mil)
+        env:
+          ARATG_PASTA: ${{ github.workspace }}
+        run: |
+          python3 - <<'PY'
+          import json, os
+          saida = os.path.join(os.environ["ARATG_PASTA"], "pares_train_mix.jsonl")
+          n = 0
+          with open(saida, "w", encoding="utf-8") as out:
+              with open("baixados/cve.jsonl", encoding="utf-8") as f:
+                  for linha in f:
+                      a = (json.loads(linha).get("Assistant") or "").strip()
+                      if a:
+                          out.write(json.dumps({"a": a}, ensure_ascii=False) + "\n")
+                          n += 1
+              with open("dados/nossos_train.jsonl", encoding="utf-8") as f:
+                  for linha in f:
+                      out.write(linha)
+                      n += 1
+          print(f"pares na mistura: {n}")
+          PY
+
+      - name: Contagem
+        env:
+          ARATG_PASTA: ${{ github.workspace }}
+        run: |
+          mkdir -p resultados
+          python conta_mix.py | tee resultados/conta.log
+
+      - name: Avalia no teste limpo
+        env:
+          ARATG_PASTA: ${{ github.workspace }}
+          ARATG_TESTE: ${{ github.workspace }}/teste/pares_test_limpo2.jsonl
+        run: python avalia_mix.py | tee resultados/avalia.log
+
+      - name: Guarda resultados
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: resultados-mix-cve
+          path: resultados/
+          retention-days: 14
