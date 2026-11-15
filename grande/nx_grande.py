@@ -12,11 +12,13 @@ DIR = os.environ.get("DADOS", "dados_grande")
 PASSOS = int(os.environ.get("PASSOS", "100000"))
 SALVA = int(os.environ.get("SALVA_A_CADA", "20000"))
 PESOS = os.environ.get("PESOS_DIR", "pesos")
+TEMPO_MAX = float(os.environ.get("TEMPO_MAX_MIN", "1e9")) * 60  # segundos de treino nesta execução
 L = 32; D = 64; HD = 128; B = 16; LR = 2e-3; K = 8; VOC = 8000
 PAD, UNK, MASK = 0, 1, 2
 TOK = re.compile(r"\w+|[^\w\s]")
 rng = np.random.default_rng(0)
 t0 = time.time()
+T_INICIO = time.time()
 
 def tokens(s):
     return TOK.findall(s.lower())[:L]
@@ -92,9 +94,29 @@ def adam(g):
         W[k] -= LR * (m/(1-0.9**t)) / (np.sqrt(v/(1-0.999**t)) + 1e-8)
         A[k][2] = t
 
-def treina():
+def carrega_ckpt():
+    cam = os.path.join(PESOS, "ckpt.npz")
+    if not os.path.exists(cam):
+        return 0
+    z = np.load(cam)
+    global E, uni
+    E = z["E"]; uni = z["uni"]
+    for k in W:
+        W[k] = z["W_" + k]; A[k] = [z["m_" + k], z["v_" + k], int(z["t_" + k])]
+    print(f"retomando do passo {int(z['passo'])}", flush=True)
+    return int(z["passo"])
+
+def salva_ckpt(passo):
+    os.makedirs(PESOS, exist_ok=True)
+    d = {"E": E, "uni": uni, "passo": np.array(passo)}
+    for k in W:
+        d["W_" + k] = W[k]; d["m_" + k] = A[k][0]; d["v_" + k] = A[k][1]; d["t_" + k] = np.array(A[k][2])
+    np.savez(os.path.join(PESOS, "ckpt.npz"), **d)
+    salva(passo)
+
+def treina(inicio=0):
     perda = 0.0; n = 0; t1 = time.time()
-    for passo in range(1, PASSOS + 1):
+    for passo in range(inicio + 1, PASSOS + 1):
         Tok, mask, Y = lote_treino()
         P = np.zeros((B, L, V), np.float32); P[mask] = uni
         t = int(rng.integers(0, K))
@@ -115,7 +137,13 @@ def treina():
             print(f"  passo {passo}/{PASSOS}: perda {perda/n:.3f} | {time.time()-t1:.0f}s", flush=True)
             perda = 0.0; n = 0
         if passo % SALVA == 0 or passo == PASSOS:
-            salva(passo)
+            salva_ckpt(passo)
+        if time.time() - T_INICIO > TEMPO_MAX and passo < PASSOS:
+            salva_ckpt(passo)
+            with open(os.path.join(PESOS, "estado.txt"), "w") as f: f.write("continua")
+            print(f"tempo desta execução esgotado no passo {passo}; checkpoint salvo", flush=True)
+            return
+    with open(os.path.join(PESOS, "estado.txt"), "w") as f: f.write("fim")
 
 def salva(passo):
     os.makedirs(PESOS, exist_ok=True)
@@ -176,8 +204,12 @@ def gera_commit(n=40, Lc=16, passos=6, temp=0.9, topk=30, rep=0.6, seed=3):
     return [" ".join(itos[int(w)] for w in Tok[b]) for b in range(n)]
 
 if __name__ == "__main__":
-    print(f"treinando {PASSOS} passos (lote {B} frases)", flush=True)
-    treina()
+    inicio = carrega_ckpt()
+    print(f"treinando até {PASSOS} passos (lote {B} frases), começando em {inicio}", flush=True)
+    if inicio < PASSOS:
+        treina(inicio)
+    else:
+        with open(os.path.join(PESOS, "estado.txt"), "w") as f: f.write("fim")
     print(f"treino terminou em {time.time()-t0:.0f}s", flush=True)
     for k in [1, 4, 8]:
         print(f"  acerto mascarado ({k} passes): {avalia(passos_fixos=k):.1%}", flush=True)

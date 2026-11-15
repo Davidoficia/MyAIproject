@@ -4,11 +4,12 @@ on:
   workflow_dispatch:
     inputs:
       passos:
-        description: "passos de treino do Nx"
-        default: "100000"
+        description: "passos totais do Nx"
+        default: "1000000"
 
 permissions:
   contents: write
+  actions: write
 
 jobs:
   treino:
@@ -17,6 +18,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - uses: actions/checkout@v4
+        continue-on-error: true
+        with:
+          ref: nx-ck
+          path: ck
+
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
@@ -24,29 +31,50 @@ jobs:
       - name: Instala dependências
         run: pip install numpy pyarrow
 
-      - name: Baixa e prepara Wikipédia pt (TucanoBR/wikipedia-PT)
+      - name: Restaura checkpoint (se existir)
+        run: |
+          mkdir -p pesos
+          if [ -f ck/pesos/ckpt.npz ]; then cp ck/pesos/ckpt.npz pesos/ && echo "checkpoint restaurado"; else echo "sem checkpoint: começa do zero"; fi
+
+      - name: Baixa e prepara Wikipédia pt
         run: python3 -I grande/prepara.py dados_grande
 
-      - name: Mostra tamanho dos dados
-        run: ls -lh dados_grande && wc -l dados_grande/*.txt
-
-      - name: Treina Nx em escala
+      - name: Treina Nx (até ~290 min nesta execução)
         env:
           DADOS: dados_grande
           PASSOS: ${{ inputs.passos }}
           SALVA_A_CADA: "20000"
           PESOS_DIR: pesos
+          TEMPO_MAX_MIN: "290"
         run: python3 -I -u grande/nx_grande.py
 
-      - name: Grava pesos na branch nx-grande
+      - name: Grava checkpoint na branch nx-ck
+        if: always()
         run: |
           git config user.name "github-actions"
           git config user.email "actions@github.com"
-          git checkout -B nx-grande
+          git checkout -B nx-ck
           git add -f pesos
-          if git diff --cached --quiet; then
-            echo "sem mudanças"
-          else
-            git commit -m "nx-grande: pesos do treino"
+          if git diff --cached --quiet; then echo "sem mudanças"; else git commit -m "nx-ck: checkpoint"; git push -f origin nx-ck; fi
+
+      - name: Encadeia próxima execução ou finaliza
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          estado=$(cat pesos/estado.txt 2>/dev/null || echo "erro")
+          echo "estado: $estado"
+          if [ "$estado" = "continua" ]; then
+            gh workflow run wiki_grande.yml --ref main -f passos=${{ inputs.passos }}
+            echo "próxima execução disparada"
+          elif [ "$estado" = "fim" ]; then
+            git config user.name "github-actions"
+            git config user.email "actions@github.com"
+            git checkout -B nx-grande
+            git add -f pesos
+            git commit -m "nx-grande: pesos finais" || true
             git push -f origin nx-grande
+            echo "treino concluído"
+          else
+            echo "execução com erro; nada disparado"
           fi
