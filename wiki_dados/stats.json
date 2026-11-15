@@ -1,0 +1,46 @@
+{
+  "animais": {
+    "pedidos": 30,
+    "achados": 30,
+    "faltando": [
+      "Onça-pintada",
+      "Arara-azul",
+      "Coruja",
+      "Vaca"
+    ],
+    "frases": 5923,
+    "palavras": 130012
+  },
+  "cidades": {
+    "pedidos": 30,
+    "achados": 30,
+    "faltando": [],
+    "frases": 7770,
+    "palavras": 200282
+  },
+  "historia": {
+    "pedidos": 20,
+    "achados": 20,
+    "faltando": [
+      "Descobrimento do Brasil",
+      "Proclamação da República no Brasil",
+      "Ditadura militar no Brasil",
+      "Revolução Farroupilha"
+    ],
+    "frases": 6210,
+    "palavras": 168194
+  },
+  "ciencia": {
+    "pedidos": 30,
+    "achados": 30,
+    "faltando": [
+      "Evolução biológica",
+      "Oxigênio",
+      "DNA",
+      "Fóton",
+      "Terremoto"
+    ],
+    "frases": 9641,
+    "palavras": 212225
+  }
+}
