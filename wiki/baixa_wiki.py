@@ -14,7 +14,7 @@ import urllib.parse
 import urllib.request
 
 API = "https://pt.wikipedia.org/w/api.php"
-UA = "aratg-dados/0.1 (projeto pessoal de pesquisa; contato via repositório)"
+UA = "aratg-dados/0.1 (https://github.com/Davidoficia/MyAIproject; projeto pessoal de pesquisa)"
 
 TEMAS = {
     "animais": [
@@ -61,21 +61,30 @@ FRASE = re.compile(r"(?<=[.!?])\s+")
 
 
 def pede_lote(titulos):
+    """Pede um lote de títulos. Trata 429 esperando mais; não engole erro."""
     params = {
         "action": "query", "prop": "extracts", "explaintext": "1",
         "exlimit": "max", "redirects": "1", "format": "json", "formatversion": "2",
         "titles": "|".join(titulos),
     }
     url = API + "?" + urllib.parse.urlencode(params)
-    for tentativa in range(3):
+    espera = 30
+    for tentativa in range(6):
         try:
             req = urllib.request.Request(url, headers={"User-Agent": UA})
-            with urllib.request.urlopen(req, timeout=60) as r:
+            with urllib.request.urlopen(req, timeout=90) as r:
                 return json.loads(r.read().decode("utf-8"))
+        except urllib.error.HTTPError as e:
+            if e.code in (429, 503):
+                print(f"  {e.code}, esperando {espera}s", flush=True)
+                time.sleep(espera)
+                espera = min(espera * 2, 300)
+                continue
+            raise
         except Exception as e:
-            print(f"  erro ({tentativa+1}/3): {type(e).__name__} {e}", flush=True)
-            time.sleep(2 * (tentativa + 1))
-    return {"query": {"pages": []}}
+            print(f"  erro ({tentativa+1}/6): {type(e).__name__} {e}", flush=True)
+            time.sleep(10)
+    raise RuntimeError("API falhou depois de 6 tentativas: " + "|".join(titulos)[:120])
 
 
 def limpa(texto):
@@ -112,26 +121,24 @@ def main():
     stats = {}
     for tema, titulos in TEMAS.items():
         vistos, frases, achados, faltando = set(), [], 0, []
-        for titulo in titulos:
-            dados = pede_lote([titulo])
+        for i in range(0, len(titulos), 10):
+            lote = titulos[i:i + 10]
+            dados = pede_lote(lote)
             paginas = dados.get("query", {}).get("pages", [])
-            if not paginas:
-                faltando.append(titulo)
-                if len(faltando) <= 3:
-                    print("  sem página:", titulo, json.dumps(dados)[:300], flush=True)
-                continue
-            pg = paginas[0]
-            if pg.get("missing") or not pg.get("extract"):
-                faltando.append(titulo)
-                if len(faltando) <= 3:
-                    print("  faltando:", titulo, {k: str(v)[:60] for k, v in pg.items()}, flush=True)
-                continue
-            achados += 1
-            for f in limpa(pg["extract"]):
-                if f not in vistos:
-                    vistos.add(f)
-                    frases.append(f)
-            time.sleep(0.5)
+            achados_lote = set()
+            for pg in paginas:
+                if pg.get("missing") or not pg.get("extract"):
+                    continue
+                achados += 1
+                achados_lote.add(pg.get("title"))
+                for f in limpa(pg["extract"]):
+                    if f not in vistos:
+                        vistos.add(f)
+                        frases.append(f)
+            for t in lote:
+                if not any(t.lower() == a.lower() or t.lower() in a.lower() for a in achados_lote):
+                    faltando.append(t)
+            time.sleep(3)
         caminho = os.path.join(args.saida, f"wiki_{tema}.txt")
         with open(caminho, "w", encoding="utf-8") as out:
             out.write("\n".join(frases) + "\n")
