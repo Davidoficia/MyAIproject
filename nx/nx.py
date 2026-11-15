@@ -9,7 +9,7 @@ Nx: difusão com refinamento iterativo e parada adaptativa (numpy, sem autograd)
 import json, os, re, sys, time
 import numpy as np
 
-W_DIR = os.environ.get("NX_DADOS", "/tmp/wchk/wiki_dados") + "/"
+W_DIR = "/tmp/wchk/wiki_dados/"
 TOK = re.compile(r"\w+|[^\w\s]")
 tok = lambda s: TOK.findall(s.lower())
 TEMAS = ["animais", "cidades", "historia", "ciencia"]
@@ -146,17 +146,76 @@ def gera(n=12, L_=20, limiar=0.8, seed=0):
         L = Lsave
     return saida, k + 1
 
+
+def gera_commit(n=40, L_=16, passos=6, temp=0.9, topk=30, rep=0.6, seed=0):
+    global L
+    r = np.random.default_rng(seed)
+    L = L_
+    Tok = np.full((n, L_), MASK, np.int64)
+    mask = Tok == MASK
+    P = np.zeros((n, L_, V), np.float32)
+    P[mask] = uni
+    for k in range(passos):
+        if not mask.any(): break
+        F = monta(Tok, mask, P)
+        _, p, _ = passe(F)
+        pos = np.argwhere(mask)
+        q = p[:, 3:].copy()
+        # repetição: penaliza palavras já presentes na mesma frase
+        for row, (b, _) in enumerate(pos):
+            usados = Tok[b][(~mask[b])]
+            for u in usados:
+                if u >= 3: q[row, u - 3] *= rep
+        # top-k + temperatura
+        thr = -np.sort(-q, axis=1)[:, topk - 1:topk]
+        q = np.where(q >= thr, q, 0)
+        q = np.power(q + 1e-12, 1.0 / temp); q /= q.sum(1, keepdims=True)
+        cum = q.cumsum(1); u = r.random((len(q), 1))
+        escolha = (cum < u).sum(1) + 3
+        conf = p[:, 3:].max(1)
+        # compromete as posições mais confiantes de cada frase
+        for b in range(n):
+            rows = np.where(pos[:, 0] == b)[0]
+            if len(rows) == 0: continue
+            quant = max(1, int(np.ceil(len(rows) / (passos - k))))
+            ordem = rows[np.argsort(-conf[rows])][:quant]
+            for row in ordem:
+                c = pos[row, 1]
+                Tok[b, c] = escolha[row]; mask[b, c] = False
+        # palpite macio atualizado para os que ainda estão mascarados (pos antigo)
+        P[pos[:, 0], pos[:, 1]] = p
+    # o que sobrou recebe o argmax
+    L = 32
+    saidas = []
+    for b in range(n):
+        saidas.append(" ".join(itos[int(w)] for w in Tok[b]))
+    return saidas
+
+def distinct2(ts):
+    bi = []
+    for t in ts:
+        w = t.split(); bi += list(zip(w, w[1:]))
+    return len(set(bi)) / max(1, len(bi))
+
+
+def distinct2(ts):
+    bi = []
+    for t in ts:
+        w = t.split(); bi += list(zip(w, w[1:]))
+    return len(set(bi)) / max(1, len(bi))
+
 if __name__ == "__main__":
     print(f"teste: {TESTE} | treino frases {len(train_ids)} | vocab {V} | K={K}", flush=True)
-    print(f"parâmetros aprox: {sum(v.size for v in W.values())/1e6 + E.size/1e6:.1f} M floats", flush=True)
     treina()
     for k in [1, 2, 4, 8]:
         a, _ = avalia(passos_fixos=k)
         print(f"  passes fixos {k}: acerto mascarado {a:.1%}", flush=True)
-    for lim in [0.10, 0.03, 0.01]:
+    for lim in [0.10, 0.03]:
         a, pm = avalia(limiar=lim)
         print(f"  parada por estabilidade (<= {lim:.0%} de trocas): acerto {a:.1%} | passes médios {pm:.2f}", flush=True)
-    amostras, np_ = gera(limiar=0.03)
-    print(f"  geração (estabilidade 3%, passes={np_}): distintas {len(set(amostras))}/12", flush=True)
-    for t in amostras[:4]: print("   >", t, flush=True)
+    for c in [dict(temp=1.0, topk=50, rep=1.0), dict(temp=0.9, topk=30, rep=0.6), dict(temp=0.8, topk=20, rep=0.5)]:
+        am = gera_commit(**c)
+        print(f"GERAÇÃO {c}: distintas {len(set(am))}/{len(am)} | distinct-2 {distinct2(am):.3f}", flush=True)
+        for t in am[:12]:
+            print("   >", t, flush=True)
     print("FIM", flush=True)
