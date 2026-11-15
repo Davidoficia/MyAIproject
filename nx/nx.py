@@ -9,7 +9,7 @@ Nx: difusão com refinamento iterativo e parada adaptativa (numpy, sem autograd)
 import json, os, re, sys, time
 import numpy as np
 
-W_DIR = "/tmp/wchk/wiki_dados/"
+W_DIR = os.environ.get("NX_DADOS", "/tmp/wchk/wiki_dados") + "/"
 TOK = re.compile(r"\w+|[^\w\s]")
 tok = lambda s: TOK.findall(s.lower())
 TEMAS = ["animais", "cidades", "historia", "ciencia"]
