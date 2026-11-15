@@ -1,0 +1,52 @@
+name: wiki-grande
+
+on:
+  workflow_dispatch:
+    inputs:
+      passos:
+        description: "passos de treino do Nx"
+        default: "100000"
+
+permissions:
+  contents: write
+
+jobs:
+  treino:
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Instala dependências
+        run: pip install numpy pyarrow
+
+      - name: Baixa e prepara Wikipédia pt (TucanoBR/wikipedia-PT)
+        run: python3 -I grande/prepara.py dados_grande
+
+      - name: Mostra tamanho dos dados
+        run: ls -lh dados_grande && wc -l dados_grande/*.txt
+
+      - name: Treina Nx em escala
+        env:
+          DADOS: dados_grande
+          PASSOS: ${{ inputs.passos }}
+          SALVA_A_CADA: "20000"
+          PESOS_DIR: pesos
+        run: python3 -I -u grande/nx_grande.py
+
+      - name: Grava pesos na branch nx-grande
+        run: |
+          git config user.name "github-actions"
+          git config user.email "actions@github.com"
+          git checkout -B nx-grande
+          git add -f pesos
+          if git diff --cached --quiet; then
+            echo "sem mudanças"
+          else
+            git commit -m "nx-grande: pesos do treino"
+            git push -f origin nx-grande
+          fi
