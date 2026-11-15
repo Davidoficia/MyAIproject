@@ -121,12 +121,11 @@ def main():
     stats = {}
     for tema, titulos in TEMAS.items():
         vistos, frases, achados, faltando = set(), [], 0, []
-        for i in range(0, len(titulos), 10):
-            lote = titulos[i:i + 10]
+        # a API só devolve o texto completo de UM artigo por pedido (exlimit=1)
+        for i in range(0, len(titulos), 1):
+            lote = titulos[i:i + 1]
             dados = pede_lote(lote)
             paginas = dados.get("query", {}).get("pages", [])
-            if i == 0:
-                print("  DEBUG chaves:", list(dados.keys()), json.dumps(dados)[:500], flush=True)
             achados_lote = set()
             for pg in paginas:
                 if pg.get("missing") or not pg.get("extract"):
@@ -140,7 +139,7 @@ def main():
             for t in lote:
                 if not any(t.lower() == a.lower() or t.lower() in a.lower() for a in achados_lote):
                     faltando.append(t)
-            time.sleep(3)
+            time.sleep(4)
         caminho = os.path.join(args.saida, f"wiki_{tema}.txt")
         with open(caminho, "w", encoding="utf-8") as out:
             out.write("\n".join(frases) + "\n")
