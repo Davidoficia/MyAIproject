@@ -125,6 +125,8 @@ def main():
             lote = titulos[i:i + 10]
             dados = pede_lote(lote)
             paginas = dados.get("query", {}).get("pages", [])
+            if i == 0:
+                print("  DEBUG chaves:", list(dados.keys()), json.dumps(dados)[:500], flush=True)
             achados_lote = set()
             for pg in paginas:
                 if pg.get("missing") or not pg.get("extract"):
