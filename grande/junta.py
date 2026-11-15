@@ -139,7 +139,7 @@ for t in range(1, SM_PASSOS + 1):
     h1 = np.tanh(h0 @ SMW["W1"] + SMW["b1"])
     zz = h1 @ SMW["W2"] + SMW["b2"]; zz -= zz.max(1, keepdims=True)
     p = np.exp(zz); p /= p.sum(1, keepdims=True)
-    dz = p; dz[np.arange(BS), y] -= 1; dz /= BS
+    dz = p.copy(); dz[np.arange(BS), y] -= 1; dz /= BS
     dpre = (dz @ SMW["W2"].T) * (1 - h1 * h1)
     gE = np.zeros_like(SMW["Es"])
     dh0 = dpre @ SMW["W1"].T
@@ -200,6 +200,8 @@ resultado = {
     "NM sozinho": acc((1, 0, 0), test),
     "Nx sozinho": acc((0, 1, 0), test),
     "SM sozinho": acc((0, 0, 1), test),
+    "SM sozinho (só casos com contexto)": acc((0, 0, 1), np.array([k for k in test if l2ref[k] is not None])),
+    "NM sozinho (só casos com contexto)": acc((1, 0, 0), np.array([k for k in test if l2ref[k] is not None])),
     "pesos escolhidos (a,b,c)": list(melhor),
     "junta (metade de teste)": acc(melhor, test),
     "junta (metade de ajuste, referência)": acc(melhor, tune),
