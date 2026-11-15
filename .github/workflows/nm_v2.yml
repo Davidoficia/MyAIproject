@@ -1,0 +1,31 @@
+name: nm-v2
+
+on:
+  workflow_dispatch:
+    inputs:
+      tamanhos:
+        description: "frases de treino do NM (separadas por vírgula)"
+        default: "2000000,6000000"
+
+permissions:
+  contents: read
+
+jobs:
+  nm:
+    runs-on: ubuntu-latest
+    timeout-minutes: 240
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Instala dependências
+        run: pip install numpy pyarrow
+      - name: Prepara Wikipédia pt
+        run: python3 -I grande/prepara.py dados_grande
+      - name: NM v2 (tamanho e suavização)
+        env:
+          DADOS: dados_grande
+          NM_TAMANHOS: ${{ inputs.tamanhos }}
+          NTE: "1500"
+        run: python3 -I -u grande/nm_v2.py
