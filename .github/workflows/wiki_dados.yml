@@ -1,0 +1,34 @@
+name: wiki-dados
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  baixa:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Baixa artigos da Wikipédia pt por tema
+        run: python3 -I wiki/baixa_wiki.py --saida wiki_dados
+
+      - name: Grava resultado na branch wiki-dados
+        run: |
+          git config user.name "github-actions"
+          git config user.email "actions@github.com"
+          git checkout -B wiki-dados
+          git add -f wiki_dados
+          if git diff --cached --quiet; then
+            echo "sem mudanças"
+          else
+            git commit -m "wiki: textos por tema"
+            git push -f origin wiki-dados
+          fi
