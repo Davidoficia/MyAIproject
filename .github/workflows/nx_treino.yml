@@ -1,0 +1,35 @@
+name: nx-treino
+
+on:
+  workflow_dispatch:
+    inputs:
+      passos:
+        description: "passos de treino"
+        default: "40000"
+
+permissions:
+  contents: read
+
+jobs:
+  treino:
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/checkout@v4
+        with:
+          ref: wiki-dados
+          path: dados
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Instala numpy
+        run: pip install numpy
+
+      - name: Treina Nx (tema animais como teste)
+        env:
+          NX_DADOS: ${{ github.workspace }}/dados/wiki_dados
+        run: python3 -I -u nx/nx.py animais ${{ inputs.passos }}
