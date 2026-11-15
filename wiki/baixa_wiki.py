@@ -112,18 +112,25 @@ def main():
     stats = {}
     for tema, titulos in TEMAS.items():
         vistos, frases, achados, faltando = set(), [], 0, []
-        for i in range(0, len(titulos), 20):
-            lote = titulos[i:i + 20]
-            dados = pede_lote(lote)
-            for pg in dados.get("query", {}).get("pages", []):
-                if pg.get("missing") or not pg.get("extract"):
-                    faltando.append(pg.get("title"))
-                    continue
-                achados += 1
-                for f in limpa(pg["extract"]):
-                    if f not in vistos:
-                        vistos.add(f)
-                        frases.append(f)
+        for titulo in titulos:
+            dados = pede_lote([titulo])
+            paginas = dados.get("query", {}).get("pages", [])
+            if not paginas:
+                faltando.append(titulo)
+                if len(faltando) <= 3:
+                    print("  sem página:", titulo, json.dumps(dados)[:300], flush=True)
+                continue
+            pg = paginas[0]
+            if pg.get("missing") or not pg.get("extract"):
+                faltando.append(titulo)
+                if len(faltando) <= 3:
+                    print("  faltando:", titulo, {k: str(v)[:60] for k, v in pg.items()}, flush=True)
+                continue
+            achados += 1
+            for f in limpa(pg["extract"]):
+                if f not in vistos:
+                    vistos.add(f)
+                    frases.append(f)
             time.sleep(0.5)
         caminho = os.path.join(args.saida, f"wiki_{tema}.txt")
         with open(caminho, "w", encoding="utf-8") as out:
