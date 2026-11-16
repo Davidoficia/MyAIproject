@@ -1,0 +1,40 @@
+name: variantes
+
+on:
+  workflow_dispatch:
+    inputs:
+      passos:
+        description: "passos de treino (igual pras quatro variantes)"
+        default: "1000"
+
+permissions:
+  contents: read
+
+jobs:
+  variantes:
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    strategy:
+      fail-fast: false
+      matrix:
+        tokenizador: [palavra, bpe]
+        emb_treinavel: [0, 1]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Instala dependências
+        run: pip install numpy pyarrow tokenizers
+      - name: Prepara Wikipédia pt
+        run: python3 -I grande/prepara.py dados_grande
+      - name: Treina variante
+        env:
+          DADOS: dados_grande
+          TOKENIZADOR: ${{ matrix.tokenizador }}
+          EMB_TREINAVEL: ${{ matrix.emb_treinavel }}
+          PASSOS: ${{ inputs.passos }}
+          JANELA: "2"
+          NTE: "1500"
+          NTREINO: "300000"
+        run: python3 -I -u grande/variantes.py
