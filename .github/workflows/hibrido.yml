@@ -1,0 +1,41 @@
+name: hibrido
+
+on:
+  workflow_dispatch:
+    inputs:
+      passos:
+        description: "passos de treino (igual pras quatro combinações)"
+        default: "1000"
+
+permissions:
+  contents: read
+
+jobs:
+  hibrido:
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    strategy:
+      fail-fast: false
+      matrix:
+        nm: [0, 1]
+        atencao: [0, 1]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Instala dependências
+        run: pip install numpy pyarrow
+      - name: Prepara Wikipédia pt
+        run: python3 -I grande/prepara.py dados_grande
+      - name: Treina híbrido
+        env:
+          DADOS: dados_grande
+          NM: ${{ matrix.nm }}
+          ATENCAO: ${{ matrix.atencao }}
+          PASSOS: ${{ inputs.passos }}
+          JANELA: "2"
+          NTE: "1500"
+          NM_FRASES: "1500000"
+          NTREINO: "300000"
+        run: python3 -I -u grande/hibrido.py
