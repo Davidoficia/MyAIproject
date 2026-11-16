@@ -1,0 +1,33 @@
+name: brown
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  brown:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        ncls: [256, 1024]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Instala dependências
+        run: pip install numpy pyarrow
+      - name: Prepara Wikipédia pt
+        run: python3 -I grande/prepara.py dados_grande
+      - name: Modelo de classes interpolado com NM
+        env:
+          DADOS: dados_grande
+          NM_FRASES: "2000000"
+          NCLS: ${{ matrix.ncls }}
+          DIM: "50"
+          NTE: "1500"
+        run: python3 -I -u grande/brown.py
