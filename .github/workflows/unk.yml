@@ -1,0 +1,25 @@
+name: unk
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  unk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Instala dependências
+        run: pip install numpy pyarrow
+      - name: Prepara Wikipédia pt
+        run: python3 -I grande/prepara.py dados_grande
+      - name: Mede taxa de UNK
+        env:
+          DADOS: dados_grande
+        run: python3 -I -u grande/unk.py
