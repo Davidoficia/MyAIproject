@@ -176,12 +176,29 @@ def gera_commit(n=40, Lc=16, passos=6, temp=0.9, topk=30, rep=0.6, seed=3):
     return [" ".join(itos[int(w)] for w in Tok[b]) for b in range(n)]
 
 if __name__ == "__main__":
+    import resource
+    n_params = int(E.size + sum(v.size for v in W.values()))
+    t_tr = time.time()
     treina()
-    print(f"treino terminou em {time.time()-t0:.0f}s", flush=True)
-    acc4 = avalia(4)
-    acc1 = avalia(1)
-    am = gera_commit()
-    resumo = {"janela": J, "passos": PASSOS, "acerto_1_passe": acc1, "acerto_4_passes": acc4,
+    t_tr = time.time() - t_tr
+    print(f"treino terminou em {time.time()-t0:.0f}s (treino {t_tr:.0f}s)", flush=True)
+    # custo de inferência: tempo pra 1000 posições mascaradas, 1 passe (média de 5)
+    Tok = np.full((1000, 1), MASK, np.int64)  # forma só pra medir monta+passe
+    Pm = np.zeros((1000, 1, V), np.float32); Pm[:, :, :] = uni
+    mk = np.ones((1000, 1), bool)
+    ts = []
+    for _ in range(5):
+        a = time.time()
+        F = monta(Tok, mk, Pm); passe(F)
+        ts.append(time.time() - a)
+    ms_1000 = 1000 * float(np.median(ts))
+    t_av = time.time(); acc4 = avalia(4); acc1 = avalia(1); t_av = time.time() - t_av
+    t_g = time.time(); am = gera_commit(); t_g = time.time() - t_g
+    rss = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024
+    resumo = {"janela": J, "passos": PASSOS, "params": n_params,
+              "acerto_1_passe": acc1, "acerto_4_passes": acc4,
+              "treino_s": round(t_tr), "inferencia_ms_1000_pos": round(ms_1000, 2),
+              "geracao_s": round(t_g, 2), "pico_ram_MB": round(rss),
               "distintas": len(set(am)), "de": len(am)}
     print("RESUMO", json.dumps(resumo), flush=True)
     for t in am[:8]:

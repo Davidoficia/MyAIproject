@@ -5,7 +5,7 @@ on:
     inputs:
       passos:
         description: "passos de treino (igual pras duas janelas)"
-        default: "1000"
+        default: "100000"
 
 permissions:
   contents: read
@@ -13,11 +13,11 @@ permissions:
 jobs:
   janela:
     runs-on: ubuntu-latest
-    timeout-minutes: 120
+    timeout-minutes: 300
     strategy:
       fail-fast: false
       matrix:
-        janela: [2, 4]
+        janela: [2, 3, 4, 6, 8, 10]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
