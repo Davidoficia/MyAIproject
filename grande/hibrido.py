@@ -237,6 +237,29 @@ def treina():
             perda = 0.0; n = 0
     return time.time() - tt
 
+def avalia_nm_sozinho():
+    """controle: argmax só do prior do NM (mesmo teste, mesmas máscaras)."""
+    r = np.random.default_rng(7)
+    ok_t = tot = ok_s = tot_s = 0
+    for b0 in range(0, len(TE), 64):
+        grupo = TE[b0:b0+64]
+        Lb = max(len(s) for s in grupo)
+        Tok = np.full((len(grupo), Lb), PAD, np.int64); Y = Tok.copy(); mask = np.zeros_like(Tok, bool)
+        for r_, s in enumerate(grupo):
+            n = len(s); Tok[r_, :n] = s; Y[r_, :n] = s
+            m = r.random(n) < 0.3
+            if not m.any(): m[0] = True
+            mask[r_, :n] = m
+        Tok[mask] = MASK
+        LPm = prior(Tok, mask)
+        LPm[:, :3] = -1e9
+        pred = LPm.argmax(1)
+        gold = Y[mask]; cert = pred == gold
+        ok_t += int(cert.sum()); tot += len(gold)
+        sem = gold != UNK
+        ok_s += int(cert[sem].sum()); tot_s += int(sem.sum())
+    return ok_t / max(1, tot), ok_s / max(1, tot_s)
+
 def avalia(passos=4):
     r = np.random.default_rng(7)
     ok_t = tot = ok_s = tot_s = 0
@@ -267,9 +290,11 @@ if __name__ == "__main__":
     n_params = int(sum(v.size for v in W.values()))
     a1, _ = avalia(1)
     a4, a4s = avalia(4)
+    nm_t, nm_s = avalia_nm_sozinho()
     rss = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024
     resumo = {"NM": USA_NM, "ATENCAO": ATENCAO, "janela": J, "passos": PASSOS, "params": n_params,
               "palavra_4_passes": round(a4, 4), "palavra_sem_unk_4_passes": round(a4s, 4),
-              "palavra_1_passe": round(a1, 4), "treino_s": round(t_tr), "pico_ram_MB": round(rss)}
+              "palavra_1_passe": round(a1, 4), "NM_sozinho_palavra": round(nm_t, 4), "NM_sozinho_sem_unk": round(nm_s, 4),
+              "treino_s": round(t_tr), "pico_ram_MB": round(rss)}
     print("RESUMO", json.dumps(resumo), flush=True)
     print("FIM", flush=True)
