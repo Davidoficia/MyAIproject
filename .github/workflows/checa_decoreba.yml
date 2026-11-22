@@ -1,0 +1,37 @@
+name: checa-decoreba
+
+# Procura trechos das amostras (954k e 3k) no corpus de treino completo, que só existe no CI.
+# Usa o mesmo preparo do treino (Wikipédia TucanoBR + livros PD). Dados NÃO entram no repo.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  checa:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Instala dependências
+        run: pip install pyarrow
+
+      - name: Prepara Wikipédia pt (mesmo do treino)
+        run: python3 -I grande/prepara.py dados_escala
+
+      - name: Acrescenta livros PD (mesmo do treino)
+        env:
+          MAX_LIVROS_PALAVRAS: "150000000"
+        run: python3 -I escala/prepara_livros.py dados_escala
+
+      - name: Checa decoreba
+        env:
+          DADOS: dados_escala
+        run: python3 -u escala/checagem/checa_decoreba.py
