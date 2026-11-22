@@ -1,0 +1,102 @@
+name: treino-escala
+
+# Treino longo do Nx (variante base) em Wikipédia pt (TucanoBR) + livros em domínio público
+# (PleIAs/Portuguese-PD). Dados NÃO entram no repo: são baixados em cada execução.
+# Cada execução treina tempo_min minutos, grava pesos na branch escala-ck e, se faltar treino,
+# dispara a próxima rodada (até max_rodadas).
+
+on:
+  workflow_dispatch:
+    inputs:
+      passos:
+        description: "passos totais do treino"
+        default: "477000"
+      tempo_min:
+        description: "minutos de treino por execução"
+        default: "300"
+      rodada:
+        description: "rodada da cadeia (automático)"
+        default: "1"
+      max_rodadas:
+        description: "limite de rodadas da cadeia"
+        default: "8"
+
+permissions:
+  contents: write
+  actions: write
+
+jobs:
+  treino:
+    runs-on: ubuntu-latest
+    timeout-minutes: 355
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Instala dependências
+        run: pip install numpy pyarrow
+
+      - name: Retoma pesos da rodada anterior
+        run: |
+          if git fetch origin escala-ck 2>/dev/null && git checkout origin/escala-ck -- pesos 2>/dev/null; then
+            echo "pesos retomados:"; ls -la pesos
+          else
+            echo "sem pesos anteriores (primeira rodada)"
+          fi
+
+      - name: Prepara Wikipédia pt (TucanoBR, CC BY-SA 3.0; split por artigo)
+        run: python3 -I grande/prepara.py dados_escala
+
+      - name: Acrescenta livros em domínio público (PleIAs/Portuguese-PD; split por livro)
+        env:
+          MAX_LIVROS_PALAVRAS: "150000000"
+        run: python3 -I escala/prepara_livros.py dados_escala
+
+      - name: Mostra tamanho dos dados
+        run: ls -lh dados_escala && wc -l dados_escala/*.txt
+
+      - name: Treina Nx em escala
+        env:
+          DADOS: ${{ github.workspace }}/dados_escala
+          PESOS_DIR: ${{ github.workspace }}/pesos
+          PASSOS: ${{ inputs.passos }}
+          TEMPO_MAX_MIN: ${{ inputs.tempo_min }}
+          SALVA_A_CADA: "2000"
+          VARIANTE: base
+        run: cd escala && python3 -u treino_escala.py
+
+      - name: Grava pesos na branch escala-ck
+        if: always()
+        run: |
+          git config user.name "github-actions"
+          git config user.email "actions@github.com"
+          git checkout -B escala-ck
+          git add -f pesos
+          if git diff --cached --quiet; then
+            echo "sem mudanças"
+          else
+            git commit -m "escala: pesos da rodada ${{ inputs.rodada }}"
+            git push -f origin escala-ck
+          fi
+
+      - name: Encadeia próxima rodada se faltar treino
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          flag=$(cat pesos/estado.txt 2>/dev/null || echo "")
+          if [ "$flag" = "continua" ] && [ "${{ inputs.rodada }}" -lt "${{ inputs.max_rodadas }}" ]; then
+            prox=$(( ${{ inputs.rodada }} + 1 ))
+            echo "disparando rodada $prox"
+            gh api -X POST repos/${{ github.repository }}/actions/workflows/treino_escala.yml/dispatches \
+              -f ref=main \
+              -f "inputs[passos]=${{ inputs.passos }}" \
+              -f "inputs[tempo_min]=${{ inputs.tempo_min }}" \
+              -f "inputs[rodada]=$prox" \
+              -f "inputs[max_rodadas]=${{ inputs.max_rodadas }}"
+          else
+            echo "fim da cadeia (flag=$flag)"
+          fi
