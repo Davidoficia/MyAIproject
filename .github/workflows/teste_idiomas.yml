@@ -1,0 +1,63 @@
+name: teste-idiomas
+
+# Teste PT x EN: mesmo treino (3k passos, vocabulário 8k, mesmo script), volume de texto parecido.
+# Só gera artefatos para leitura cega; não mexe em branch nenhuma.
+on:
+  workflow_dispatch:
+    inputs:
+      passos:
+        description: "passos de treino"
+        default: "3000"
+
+permissions:
+  contents: read
+
+jobs:
+  treino:
+    strategy:
+      fail-fast: false
+      matrix:
+        lang: [pt, en]
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install numpy pyarrow
+
+      - name: Prepara dados (PT = Wikipédia pt; EN = public_library 1929)
+        run: |
+          if [ "${{ matrix.lang }}" = "pt" ]; then
+            python3 -I grande/prepara.py dados_brutos
+          else
+            python3 -I escala/prepara_en.py dados_brutos
+          fi
+          wc -l dados_brutos/*.txt
+
+      - name: Iguala o volume de texto (150 MB de treino, 5 MB de teste)
+        run: |
+          mkdir -p dados && head -c 150000000 dados_brutos/treino.txt > dados/treino.txt && head -c 5000000 dados_brutos/teste.txt > dados/teste.txt
+          ls -lh dados
+
+      - name: Treina 3k passos
+        env:
+          DADOS: ${{ github.workspace }}/dados
+          PESOS_DIR: ${{ github.workspace }}/pesos_${{ matrix.lang }}
+          PASSOS: ${{ inputs.passos }}
+          TEMPO_MAX_MIN: "100"
+          SALVA_A_CADA: "1000"
+          VARIANTE: base
+        run: cd escala && python3 -u treino_escala.py | tee ../log_${{ matrix.lang }}.txt
+
+      - name: Gera amostras
+        run: |
+          cd escala && python3 -I gera_amostras.py ${{ github.workspace }}/pesos_${{ matrix.lang }} ${{ github.workspace }}/amostras_${{ matrix.lang }}.txt 12
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: teste-${{ matrix.lang }}
+          path: |
+            amostras_${{ matrix.lang }}.txt
+            log_${{ matrix.lang }}.txt
