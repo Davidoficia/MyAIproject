@@ -53,7 +53,7 @@ jobs:
 
       - name: Gera amostras
         run: |
-          cd escala && python3 -I gera_amostras.py ${{ github.workspace }}/pesos_${{ matrix.lang }} ${{ github.workspace }}/amostras_${{ matrix.lang }}.txt 12
+          cd escala && python3 gera_amostras.py ${{ github.workspace }}/pesos_${{ matrix.lang }} ${{ github.workspace }}/amostras_${{ matrix.lang }}.txt 12
 
       - uses: actions/upload-artifact@v4
         with:
