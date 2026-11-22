@@ -55,6 +55,11 @@ jobs:
         run: |
           cd escala && python3 gera_amostras.py ${{ github.workspace }}/pesos_${{ matrix.lang }} ${{ github.workspace }}/amostras_${{ matrix.lang }}.txt 12
 
+      - name: Imprime amostras no log (leitura cega)
+        run: |
+          echo "=== AMOSTRAS ${{ matrix.lang }} ==="
+          cat amostras_${{ matrix.lang }}.txt
+
       - uses: actions/upload-artifact@v4
         with:
           name: teste-${{ matrix.lang }}
