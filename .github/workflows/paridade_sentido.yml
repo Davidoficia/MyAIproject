@@ -1,0 +1,25 @@
+name: paridade-sentido
+
+# Teste de paridade da camada de compatibilidade (escala/compat_sentido.py):
+# numpy (inferência) x torch (treino) com os mesmos pesos, tolerância 1e-10.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  paridade:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Instala numpy e torch (CPU)
+        run: pip install numpy torch --index-url https://download.pytorch.org/whl/cpu --extra-index-url https://pypi.org/simple
+      - name: Paridade
+        working-directory: escala
+        run: python3 -u compat_sentido.py paridade
