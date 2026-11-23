@@ -1,0 +1,76 @@
+name: janela-dinamica
+
+# Comparação de janela no Nx (escala/nx_janela.py): 3 braços, mesmo orçamento de passos.
+#   A: W=2 sem borda (referência = Nx atual)
+#   B: W=2 com borda na fronteira da frase
+#   C: W=3 com borda
+# Métrica: acerto mascarado no teste (4 passes). Resultado em artefato JSON.
+
+on:
+  workflow_dispatch:
+    inputs:
+      passos:
+        description: "Passos por braço"
+        default: "3000"
+        required: false
+
+permissions:
+  contents: read
+
+jobs:
+  prepara:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install pyarrow numpy
+      - name: Prepara Wikipédia pt (mesmo do treino)
+        run: python3 -I grande/prepara.py dados_escala
+      - name: Acrescenta livros PD (mesmo do treino)
+        env:
+          MAX_LIVROS_PALAVRAS: "150000000"
+        run: python3 -I escala/prepara_livros.py dados_escala
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dados-janela-${{ github.run_id }}
+          path: dados_escala/*.txt
+          retention-days: 3
+
+  braco:
+    needs: prepara
+    runs-on: ubuntu-latest
+    timeout-minutes: 240
+    strategy:
+      fail-fast: false
+      matrix:
+        braco:
+          - { nome: A, janela: "2", borda: "0" }
+          - { nome: B, janela: "2", borda: "1" }
+          - { nome: C, janela: "3", borda: "1" }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install numpy
+      - uses: actions/download-artifact@v4
+        with:
+          name: dados-janela-${{ github.run_id }}
+          path: dados_escala
+      - name: Treina braço ${{ matrix.braco.nome }}
+        env:
+          DADOS: dados_escala
+          JANELA: ${{ matrix.braco.janela }}
+          BORDA: ${{ matrix.braco.borda }}
+          PASSOS: ${{ inputs.passos }}
+          SAIDA: resultado_${{ matrix.braco.nome }}.json
+        working-directory: escala
+        run: python3 -u nx_janela.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: janela-${{ matrix.braco.nome }}-${{ github.run_id }}
+          path: escala/resultado_${{ matrix.braco.nome }}.json
+          retention-days: 30

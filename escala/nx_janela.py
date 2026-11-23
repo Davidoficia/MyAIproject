@@ -35,10 +35,15 @@ def vocab():
     return itos, {w: i for i, w in enumerate(itos)}
 
 
+MAX_LINHAS = int(os.environ.get("MAX_LINHAS", "2000000"))
+
+
 def carrega(caminho, stoi):
     flat = array.array("q"); off = array.array("q", [0])
     with open(caminho, encoding="utf-8") as f:
-        for l in f:
+        for i, l in enumerate(f):
+            if i >= MAX_LINHAS:
+                break
             ids = [stoi.get(w, n.UNK) for w in tokens(l)]
             if len(ids) < 3:
                 continue
