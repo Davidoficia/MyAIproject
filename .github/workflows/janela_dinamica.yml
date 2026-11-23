@@ -62,7 +62,7 @@ jobs:
           path: dados_escala
       - name: Treina braço ${{ matrix.braco.nome }}
         env:
-          DADOS: dados_escala
+          DADOS: ${{ github.workspace }}/dados_escala
           JANELA: ${{ matrix.braco.janela }}
           BORDA: ${{ matrix.braco.borda }}
           PASSOS: ${{ inputs.passos }}
