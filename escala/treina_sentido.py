@@ -63,16 +63,24 @@ def alvo(B_ids, V):
     return t / t.sum(1, keepdim=True).clamp(min=1)
 
 
-def avalia(tp, Wout, bout, A, Bm, ctrl=False):
+TOP_FREQ = 200   # métrica só em palavras fora das 200 mais frequentes (senão "de/a/o" dominam)
+
+
+def avalia(tp, Wout, bout, A, Bm, ctrl=False, prior=None):
     with torch.no_grad():
         acc = []
         for i in range(0, len(A), 512):
             a = torch.from_numpy(A[i:i + 512]); b = torch.from_numpy(Bm[i:i + 512])
-            z = c.forward_torch(tp, a)
-            if ctrl:
-                z = torch.roll(z, 1, 0)
-            logits = z @ Wout + bout
+            if prior is not None:
+                logits = prior.expand(a.shape[0], -1).clone()
+            else:
+                z = c.forward_torch(tp, a)
+                if ctrl:
+                    z = torch.roll(z, 1, 0)
+                logits = z @ Wout + bout
+            logits[:, :TOP_FREQ] = -1e9
             t = alvo(b, V_)
+            t[:, :TOP_FREQ] = 0
             top = logits.topk(50, dim=1).indices
             hit = t.gather(1, top) > 0
             n = (t > 0).sum(1).clamp(min=1)
@@ -92,6 +100,10 @@ if __name__ == "__main__":
     tp = {k: torch.tensor(v, dtype=torch.float32, requires_grad=True) for k, v in p0.items()}
     Wout = torch.tensor(rng.normal(0, 1 / math.sqrt(D), (D, V_)), dtype=torch.float32, requires_grad=True)
     bout = torch.zeros(V_, requires_grad=True)
+    cont = np.bincount(Btr.ravel(), minlength=V_).astype(np.float64) + 1
+    prior = torch.tensor(np.log(cont / cont.sum()), dtype=torch.float32).unsqueeze(0)
+    r_prior = avalia(None, None, None, Ate, Bte, prior=prior)
+    print(f"baseline prior (sem sentido) recall@50 = {r_prior:.4f}", flush=True)
     params = list(tp.values()) + [Wout, bout]
     opt = torch.optim.Adam(params, lr=LR)
     for passo in range(1, PASSOS + 1):
@@ -104,8 +116,8 @@ if __name__ == "__main__":
         if passo % EVAL_CADA == 0 or passo == PASSOS:
             r_real = avalia(tp, Wout.detach(), bout.detach(), Ate, Bte)
             r_ctrl = avalia(tp, Wout.detach(), bout.detach(), Ate, Bte, ctrl=True)
-            print(f"passo {passo} loss {loss.item():.3f} recall@50 real {r_real:.4f} controle {r_ctrl:.4f} t={time.time()-t0:.0f}s", flush=True)
-    res = {"passos": PASSOS, "recall50_real": r_real, "recall50_controle": r_ctrl, "V": V_}
+            print(f"passo {passo} loss {loss.item():.3f} recall@50 real {r_real:.4f} controle {r_ctrl:.4f} prior {r_prior:.4f} t={time.time()-t0:.0f}s", flush=True)
+    res = {"passos": PASSOS, "recall50_real": r_real, "recall50_controle": r_ctrl, "recall50_prior": r_prior, "V": V_}
     print(json.dumps(res), flush=True)
     json.dump(res, open(f"{SAIDA}/resultado.json", "w"))
     out = {k: v.detach().double().numpy() for k, v in tp.items()}
