@@ -91,6 +91,28 @@ def avalia(tp, Wout, bout, A, Bm, ctrl=False, prior=None):
         return float(np.concatenate(acc).mean())
 
 
+def perturba(M, seed=1):
+    """Mudança leve e reproduzível da frase de entrada: tira ~20% das palavras e troca ~10% dos vizinhos."""
+    rng = np.random.default_rng(seed)
+    out = np.zeros_like(M)
+    for i, row in enumerate(M):
+        ids = [int(x) for x in row if x != 0]
+        if len(ids) > 3:
+            keep = [x for x in ids if rng.random() > 0.2]
+            if len(keep) < 3:
+                keep = ids[:3]
+            j = 0
+            while j < len(keep) - 1:
+                if rng.random() < 0.1:
+                    keep[j], keep[j + 1] = keep[j + 1], keep[j]
+                    j += 2
+                else:
+                    j += 1
+            ids = keep
+        out[i, :min(len(ids), N)] = ids[:N]
+    return out
+
+
 if __name__ == "__main__":
     t0 = time.time()
     itos, stoi = vocab(); V_ = len(itos)
@@ -120,7 +142,10 @@ if __name__ == "__main__":
             r_real = avalia(tp, Wout.detach(), bout.detach(), Ate, Bte)
             r_ctrl = avalia(tp, Wout.detach(), bout.detach(), Ate, Bte, ctrl=True)
             print(f"passo {passo} loss {loss.item():.3f} recall@50 real {r_real:.4f} controle {r_ctrl:.4f} prior {r_prior:.4f} t={time.time()-t0:.0f}s", flush=True)
-    res = {"passos": PASSOS, "recall50_real": r_real, "recall50_controle": r_ctrl, "recall50_prior": r_prior, "V": V_}
+    Ate_p = perturba(Ate)
+    r_pert = avalia(tp, Wout.detach(), bout.detach(), Ate_p, Bte)
+    print(f"frase alterada (mesmo tema, palavras tiradas/trocadas): recall@50 {r_pert:.4f} (original {r_real:.4f}, outro assunto {r_ctrl:.4f})", flush=True)
+    res = {"passos": PASSOS, "recall50_real": r_real, "recall50_controle": r_ctrl, "recall50_prior": r_prior, "recall50_alterada": r_pert, "V": V_}
     print(json.dumps(res), flush=True)
     json.dump(res, open(f"{SAIDA}/resultado.json", "w"))
     out = {k: v.detach().double().numpy() for k, v in tp.items()}
