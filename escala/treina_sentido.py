@@ -145,7 +145,21 @@ if __name__ == "__main__":
     Ate_p = perturba(Ate)
     r_pert = avalia(tp, Wout.detach(), bout.detach(), Ate_p, Bte)
     print(f"frase alterada (mesmo tema, palavras tiradas/trocadas): recall@50 {r_pert:.4f} (original {r_real:.4f}, outro assunto {r_ctrl:.4f})", flush=True)
-    res = {"passos": PASSOS, "recall50_real": r_real, "recall50_controle": r_ctrl, "recall50_prior": r_prior, "recall50_alterada": r_pert, "V": V_}
+    # ambiguidade: frases curtas (menos de 8 palavras), em que o assunto é difícil de inferir
+    tam = (Ate != 0).sum(1)
+    curtas = tam < 8
+    r_curtas = avalia(tp, Wout.detach(), bout.detach(), Ate[curtas], Bte[curtas]) if curtas.sum() > 50 else float("nan")
+    # vários temas: metade da frase A do artigo i + metade da frase de outro artigo (i+1000); alvo = frase B do artigo i
+    mistura = np.zeros_like(Ate)
+    for i in range(len(Ate)):
+        j = (i + 1000) % len(Ate)
+        a = [x for x in Ate[i] if x != 0]; b = [x for x in Ate[j] if x != 0]
+        m = a[:max(1, len(a) // 2)] + b[:max(1, len(b) // 2)]
+        mistura[i, :min(len(m), N)] = m[:N]
+    r_mistura = avalia(tp, Wout.detach(), bout.detach(), mistura, Bte)
+    print(f"ambiguidade (frases curtas, n={int(curtas.sum())}): recall@50 {r_curtas:.4f}", flush=True)
+    print(f"vários temas (mistura de dois artigos): recall@50 {r_mistura:.4f} (original {r_real:.4f})", flush=True)
+    res = {"passos": PASSOS, "recall50_real": r_real, "recall50_controle": r_ctrl, "recall50_prior": r_prior, "recall50_alterada": r_pert, "recall50_curtas": r_curtas, "recall50_mistura": r_mistura, "V": V_}
     print(json.dumps(res), flush=True)
     json.dump(res, open(f"{SAIDA}/resultado.json", "w"))
     out = {k: v.detach().double().numpy() for k, v in tp.items()}
