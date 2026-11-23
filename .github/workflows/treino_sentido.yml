@@ -1,0 +1,50 @@
+name: treino-sentido
+
+# Treina o módulo de sentido (escala/treina_sentido.py, PyTorch) e publica resultado + pesos (artefato).
+# Pesos saem no formato de compat_sentido.py, para a inferência em numpy (sandbox e Redmi).
+
+on:
+  workflow_dispatch:
+    inputs:
+      passos:
+        description: "Passos de treino"
+        default: "3000"
+        required: false
+      eval_cada:
+        description: "Avalia a cada N passos"
+        default: "1000"
+        required: false
+
+permissions:
+  contents: read
+
+jobs:
+  treino:
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Instala dependências
+        run: pip install pyarrow numpy torch --index-url https://download.pytorch.org/whl/cpu --extra-index-url https://pypi.org/simple
+      - name: Prepara Wikipédia pt
+        run: python3 -I grande/prepara.py dados_escala
+      - name: Acrescenta livros PD
+        env:
+          MAX_LIVROS_PALAVRAS: "150000000"
+        run: python3 -I escala/prepara_livros.py dados_escala
+      - name: Treina sentido
+        env:
+          DADOS: ${{ github.workspace }}/dados_escala
+          PASSOS: ${{ inputs.passos }}
+          EVAL_CADA: ${{ inputs.eval_cada }}
+          SAIDA: ${{ github.workspace }}/saida_sentido
+        working-directory: escala
+        run: python3 -u treina_sentido.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sentido-${{ github.run_id }}
+          path: saida_sentido/
+          retention-days: 30
