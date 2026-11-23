@@ -67,17 +67,20 @@ TOP_FREQ = 200   # métrica só em palavras fora das 200 mais frequentes (senão
 
 
 def avalia(tp, Wout, bout, A, Bm, ctrl=False, prior=None):
+    """ctrl=True: usa o z de uma frase ~1000 posições antes (outro artigo, pois o teste está em ordem de artigo)."""
     with torch.no_grad():
+        if prior is None:
+            Z = torch.cat([c.forward_torch(tp, torch.from_numpy(A[i:i + 512])) for i in range(0, len(A), 512)])
+            if ctrl:
+                Z = torch.roll(Z, 1000, 0)
+            LOG_ALL = Z @ Wout + bout
         acc = []
         for i in range(0, len(A), 512):
-            a = torch.from_numpy(A[i:i + 512]); b = torch.from_numpy(Bm[i:i + 512])
+            b = torch.from_numpy(Bm[i:i + 512])
             if prior is not None:
-                logits = prior.expand(a.shape[0], -1).clone()
+                logits = prior.expand(b.shape[0], -1).clone()
             else:
-                z = c.forward_torch(tp, a)
-                if ctrl:
-                    z = torch.roll(z, 1, 0)
-                logits = z @ Wout + bout
+                logits = LOG_ALL[i:i + 512].clone()
             logits[:, :TOP_FREQ] = -1e9
             t = alvo(b, V_)
             t[:, :TOP_FREQ] = 0
