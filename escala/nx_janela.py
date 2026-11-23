@@ -12,6 +12,7 @@ import nx_variantes as n
 
 W = int(os.environ.get("JANELA", "2"))
 BORDA_ON = os.environ.get("BORDA", "0") == "1"
+GATE_ON = os.environ.get("GATE", "0") == "1"   # janela aprendida: um portão por distância/posição
 DIR = os.environ.get("DADOS", "dados_grande")
 PASSOS = int(os.environ.get("PASSOS", "1000"))
 SAIDA = os.environ.get("SAIDA", "")
@@ -80,6 +81,8 @@ def janelas(flat, off, r, Bn):
 def passes_w(p, ids, K_):
     Bn = ids.shape[0]; E = p["E"]; V = E.d.shape[0]
     slots = [n.embed(E, ids[:, j]) for j in range(2 * W + 1) if j != W]
+    if GATE_ON:
+        slots = [n.mul(xk, n.sigmoid(p[f"g{j}"])) for j, xk in enumerate(slots)]
     P = n.T(np.full((Bn, V), 1.0 / V))
     for _ in range(K_):
         Xc = n.matmul(P, E)
@@ -123,6 +126,9 @@ if __name__ == "__main__":
     # janela muda o tamanho de W1: recria com nin = (2W+1)*D
     nin = (2 * W + 1) * n.D
     p["W1"] = n.T(rng.normal(0, 1 / np.sqrt(nin), (nin, n.HD)))
+    if GATE_ON:
+        for j in range(2 * W):
+            p[f"g{j}"] = n.T(np.zeros((1, 1)))
     st = {"t": 0, "m": {k: np.zeros_like(v.d) for k, v in p.items()},
           "v": {k: np.zeros_like(v.d) for k, v in p.items()}}
     Xte, Yte = janelas(fte, ote, np.random.default_rng(7), 2000)

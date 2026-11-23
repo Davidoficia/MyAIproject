@@ -4,6 +4,7 @@ name: janela-dinamica
 #   A: W=2 sem borda (referência = Nx atual)
 #   B: W=2 com borda na fronteira da frase
 #   C: W=3 com borda
+#   D: W=3 com borda + portões aprendidos por posição (janela aprendida)
 # Métrica: acerto mascarado no teste (4 passes). Resultado em artefato JSON.
 
 on:
@@ -47,9 +48,10 @@ jobs:
       fail-fast: false
       matrix:
         braco:
-          - { nome: A, janela: "2", borda: "0" }
-          - { nome: B, janela: "2", borda: "1" }
-          - { nome: C, janela: "3", borda: "1" }
+          - { nome: A, janela: "2", borda: "0", gate: "0" }
+          - { nome: B, janela: "2", borda: "1", gate: "0" }
+          - { nome: C, janela: "3", borda: "1", gate: "0" }
+          - { nome: D, janela: "3", borda: "1", gate: "1" }
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -65,6 +67,7 @@ jobs:
           DADOS: ${{ github.workspace }}/dados_escala
           JANELA: ${{ matrix.braco.janela }}
           BORDA: ${{ matrix.braco.borda }}
+          GATE: ${{ matrix.braco.gate }}
           PASSOS: ${{ inputs.passos }}
           SAIDA: resultado_${{ matrix.braco.nome }}.json
         working-directory: escala
