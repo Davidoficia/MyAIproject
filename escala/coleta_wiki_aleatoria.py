@@ -39,13 +39,13 @@ while len(paginas) < N:
 ids = list(paginas)[:N]
 print("sorteados:", len(ids), flush=True)
 
-# 2) texto puro + revid + URL, em lotes de 20
+# 2) texto puro + revid + URL
 artigos = []
-for i in range(0, len(ids), 20):
-    lote = ids[i:i + 20]
-    r = api({"action": "query", "pageids": "|".join(map(str, lote)), "prop": "extracts|revisions",
-             "explaintext": "1", "exlimit": "max", "rvprop": "ids", "redirects": "0"})
-    for p in r["query"]["pages"]:
+# texto completo (explaintext) só retorna 1 extrato por requisição: uma página por chamada
+for pid in ids:
+    r = api({"action": "query", "pageids": str(pid), "prop": "extracts|revisions",
+             "explaintext": "1", "rvprop": "ids", "redirects": "0"})
+    for p in r["query"].get("pages", []):
         texto = (p.get("extract") or "").strip()
         if not texto:
             continue
