@@ -130,6 +130,7 @@ if __name__ == "__main__":
     for passo in range(1, PASSOS + 1):
         Xb, yb = janelas(ftr, otr, np.random.default_rng([0, passo]), B)
         loss = perda_w(p, Xb, yb, K)
+        for v in p.values(): v.g = None   # zera gradiente antes de cada passo
         n.backward(loss)
         n.adam(p, st, n.lr_em(passo, PASSOS, LR))
         if passo % max(1, PASSOS // 5) == 0 or passo == PASSOS:
