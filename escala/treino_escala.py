@@ -92,6 +92,51 @@ def janelas(flat, off, r, Bn):
     return np.concatenate(xs), np.concatenate(ys)
 
 
+
+# ---------- métricas gravadas durante o treino (mesma régua de diagnosticos.py) ----------
+AVALIA = int(os.environ.get("AVALIA_CADA", "50000"))
+N_AVAL = int(os.environ.get("N_AVALIACAO", "300"))
+ARQ_MET = os.path.join(PESOS, "metricas.jsonl")
+textos_aval = []
+with open(os.path.join(DIR, "teste.txt"), encoding="utf-8") as f:
+    for l in f:
+        if len(textos_aval) >= N_AVAL:
+            break
+        if l.strip():
+            textos_aval.append(l.strip())
+
+
+def metricas(p, passo):
+    """Acerto (como o CI), acerto por posição, taxa de UNK e bits por caractere (PLL) no teste fixo."""
+    Xs, ys, pos, chars, nunk, ntok = [], [], [], 0, 0, 0
+    for txt in textos_aval:
+        ids = [stoi.get(w, n.UNK) for w in tokens(txt)]
+        if len(ids) < 3:
+            continue
+        chars += len(txt.replace(" ", "")); ntok += len(ids); nunk += sum(1 for i in ids if i == n.UNK)
+        for j in range(len(ids)):
+            w = [ids[k] if 0 <= k < len(ids) else n.PAD for k in range(j - 2, j + 3)]
+            w[2] = n.MASK
+            Xs.append(w); ys.append(ids[j]); pos.append(min(j, 15))
+    X = np.array(Xs, dtype=np.int64); Y = np.array(ys, dtype=np.int64); P_ = np.array(pos)
+    probs = []
+    for i in range(0, len(X), 512):
+        probs.append(n.passes(p, VAR, X[i:i + 512], K).d)
+    Pr = np.concatenate(probs)
+    pred = Pr.argmax(1)
+    util = Y >= 3
+    acc = float((pred[util] == Y[util]).mean()) if util.any() else 0.0
+    por_pos = {int(k): round(float((pred[util & (P_ == k)] == Y[util & (P_ == k)]).mean()), 4)
+               for k in sorted(set(P_[util].tolist()))}
+    bits = float(-np.log2(np.maximum(Pr[np.arange(len(Y)), Y], 1e-12)).sum())
+    m = {"passo": passo, "acerto_como_CI": round(acc, 5), "taxa_unk": round(nunk / max(ntok, 1), 5),
+         "bits_por_caractere_pll": round(bits / max(chars, 1), 5), "acerto_por_posicao": por_pos,
+         "frases": len(textos_aval), "t_s": round(time.time() - T_INI)}
+    with open(ARQ_MET, "a", encoding="utf-8") as f:
+        f.write(json.dumps(m, ensure_ascii=False) + "\n")
+    log(f"métricas passo {passo}: acerto {acc:.2%} | bits/caractere {m['bits_por_caractere_pll']:.4f} | UNK {m['taxa_unk']:.2%}")
+    return m
+
 # ---------- modelo, estado e retomada ----------
 p = n.init(V, VAR, np.random.default_rng(SEMENTE))
 st = {"t": 0, "m": {k: np.zeros_like(v.d) for k, v in p.items()}, "v": {k: np.zeros_like(v.d) for k, v in p.items()}}
@@ -113,6 +158,8 @@ for passo in range(inicio + 1, PASSOS + 1):
         log(f"passo {passo}/{PASSOS} | perda média (500) {np.mean(perdas[-500:]):.3f}")
     if passo % SALVA == 0:
         n.salva_estado(ARQ_ESTADO, p, st, passo)
+    if passo % AVALIA == 0:
+        metricas(p, passo)
     if time.time() - T_INI > TEMPO_MAX and passo < PASSOS:
         n.salva_estado(ARQ_ESTADO, p, st, passo)
         open(ARQ_FLAG, "w").write("continua")
@@ -121,6 +168,8 @@ for passo in range(inicio + 1, PASSOS + 1):
 
 n.salva_estado(ARQ_ESTADO, p, st, PASSOS)
 open(ARQ_FLAG, "w").write("fim")
+if PASSOS % AVALIA != 0:
+    metricas(p, PASSOS)
 acc = n.acerto(p, VAR, Xte, Yte)
 log(f"acerto mascarado no teste (2+2, 1 passe por K={K}): {acc:.1%}")
 np.savez(os.path.join(PESOS, f"ckpt_{VAR}.npz"), **{k: v.d for k, v in p.items()})
