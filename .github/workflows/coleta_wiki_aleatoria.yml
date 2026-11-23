@@ -1,0 +1,41 @@
+name: coleta-wiki-aleatoria
+
+# Sorteia N artigos aleatórios da Wikipédia pt (sem filtro de tema) e publica como artefato.
+# Não entra no repo. Licença: CC BY-SA, atribuição guardada em cada item.
+
+on:
+  workflow_dispatch:
+    inputs:
+      n_artigos:
+        description: "Quantos artigos sortear"
+        default: "300"
+        required: false
+
+permissions:
+  contents: read
+
+jobs:
+  coleta:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Sorteia artigos
+        env:
+          N_ARTIGOS: ${{ inputs.n_artigos }}
+        run: python3 -u escala/coleta_wiki_aleatoria.py dados_aleatorios
+
+      - name: Resumo
+        run: |
+          python3 -c "import json;a=json.load(open('dados_aleatorios/artigos.json'));print(len(a));[print(x['pageid'],x['revid'],x['titulo'],len(x['texto'])) for x in a[:15]]"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wiki-aleatoria-${{ github.run_id }}
+          path: dados_aleatorios/artigos.json
+          retention-days: 30
