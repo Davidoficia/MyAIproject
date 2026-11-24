@@ -31,21 +31,24 @@ M = np.stack(rows)
 Z = np.concatenate([c.forward_np(p, M[i:i + 256]) for i in range(0, len(M), 256)])
 logits = Z @ Wout + bout
 
+TOP_FREQ = 200   # esconde as 200 palavras mais comuns (de, a, e, vírgula...) para mostrar o assunto
+
+
 def sugestoes(vetor, k=8):
     ordem = np.argsort(-vetor)
     out = []
     for i in ordem:
-        if i >= 3:
+        if TOP_FREQ <= i and i >= 3:
             out.append(itos[i])
         if len(out) == k:
             break
     return ", ".join(out)
 
 linhas = []
-linhas.append("=== 1) O que ele sugere para cada frase de teste (frases de artigos que ele nunca viu) ===")
+linhas.append("=== 1) Palavras de assunto que ele sugere (sem as 200 mais comuns) ===")
 for i in range(0, 2000, 200):
     linhas.append(f"\nFRASE: {textos[i][:160]}")
-    linhas.append(f"  sugestões: {sugestoes(logits[i])}")
+    linhas.append(f"  sugestões de assunto: {sugestoes(logits[i])}")
 
 linhas.append("\n\n=== 2) Frases mais parecidas pelo resumo (vizinhos) ===")
 Zn = Z / np.linalg.norm(Z, axis=1, keepdims=True).clip(min=1e-9)
