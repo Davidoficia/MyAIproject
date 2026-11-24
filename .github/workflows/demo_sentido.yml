@@ -26,6 +26,8 @@ jobs:
         with:
           name: sentido-${{ inputs.run_treino }}
           path: saida_sentido
+          run-id: ${{ inputs.run_treino }}
+          github-token: ${{ github.token }}
       - name: Prepara dados de teste
         run: python3 -I grande/prepara.py dados_escala
       - name: Demonstração
