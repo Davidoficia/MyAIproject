@@ -14,6 +14,7 @@ import numpy as np
 
 sys.setrecursionlimit(20000)
 D, HD, HEADS, HA, M, R, HL, K = 32, 128, 2, 16, 3, 2, 32, 4
+D = int(os.environ.get("NX_D", str(D)))   # teste de capacidade (padrão 32, igual ao Nx atual)
 PAD, UNK, MASK = 0, 1, 2
 DT = np.float64   # float32 no treino longo (main), float64 no gradcheck
 
