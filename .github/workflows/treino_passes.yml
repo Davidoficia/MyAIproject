@@ -50,8 +50,15 @@ jobs:
         run: python3 -u treino_escala.py
       - name: Mostra métricas
         run: cat cap_${{ matrix.braco.nome }}/metricas.jsonl | python3 -c "import sys,json; [print(d['passo'], round(d['acerto_como_CI'],4), round(d['bits_por_caractere_pll'],4), round(d['taxa_unk'],4)) for d in map(json.loads, sys.stdin)]"
+      - name: Gera 40 amostras (mesma config para os dois braços)
+        env:
+          NX_K: ${{ matrix.braco.dim }}
+        working-directory: escala
+        run: python3 -u gera_amostras.py ${{ github.workspace }}/cap_${{ matrix.braco.nome }} ${{ github.workspace }}/amostras_${{ matrix.braco.nome }}.txt 40
       - uses: actions/upload-artifact@v4
         with:
           name: passes-${{ matrix.braco.nome }}-${{ github.run_id }}
-          path: cap_${{ matrix.braco.nome }}/metricas.jsonl
+          path: |
+            cap_${{ matrix.braco.nome }}/metricas.jsonl
+            amostras_${{ matrix.braco.nome }}.txt
           retention-days: 30
