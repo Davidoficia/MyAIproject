@@ -162,6 +162,10 @@ def init(V, variante, rng):
             p[f"Wa{h}"] = T(rng.normal(0, 1 / np.sqrt(D), (D, HA)))
             p[f"Wb{h}"] = T(rng.normal(0, 1 / np.sqrt(D), (D, HA)))
             p[f"va{h}"] = T(rng.normal(0, 1 / np.sqrt(HA), (HA, 1)))
+    if variante == "film":
+        for k in range(K):
+            p[f"Wg{k}"] = T(np.zeros((D, HD)))   # ganho por passe (começa em 1)
+            p[f"Wb{k}"] = T(np.zeros((D, HD)))   # deslocamento por passe (começa em 0)
     if variante in ("mod", "tudo"):
         p["Wc"] = T(rng.normal(0, 0.1, (HD, M)))
         for m in range(M):
@@ -179,7 +183,7 @@ def passes(p, variante, ids, K_):
     ctx = [embed(E, ids[:, 0]), embed(E, ids[:, 1]), embed(E, ids[:, 3]), embed(E, ids[:, 4])]
     P = T(np.full((B, V), 1.0 / V))
     h = T(np.zeros((B, HL))); c = T(np.zeros((B, HL)))
-    for _ in range(K_):
+    for _k in range(K_):
         Xc = matmul(P, E)                      # palpite macio do centro
         F = concat([ctx[0], ctx[1], Xc, ctx[2], ctx[3]])
         if variante in ("mh", "tudo"):
@@ -203,6 +207,10 @@ def passes(p, variante, ids, K_):
             h = mul(o_, tanh(c))
             pre = add(pre, matmul(h, p["Wh"]))
         H = tanh(add(pre, p["b1"]))
+        if variante == "film":
+            cv = mul(add(add(add(ctx[0], ctx[1]), ctx[2]), ctx[3]), T(np.array(0.25)))
+            ganho = add(matmul(cv, p[f"Wg{_k}"]), T(np.ones((1, 1))))
+            H = add(mul(ganho, H), matmul(cv, p[f"Wb{_k}"]))
         if variante in ("mod", "tudo"):
             for _r in range(R):                # sequência de R passos de módulos
                 pi = softmax(matmul(H, p["Wc"]))
