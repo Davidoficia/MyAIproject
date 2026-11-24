@@ -74,5 +74,47 @@ for i in range(0, 2000, 400):
     linhas.append(f"  sugestões da mistura: {sugestoes(lm)}")
     linhas.append(f"  sugestões só da frase A: {sugestoes(logits[i])}")
 
+
+MESES = {"janeiro", "fevereiro", "março", "abril", "maio", "junho", "julho", "agosto", "setembro", "outubro", "novembro", "dezembro"}
+def ehdata(i):
+    w = itos[i]
+    return w.isdigit() or w in MESES
+
+def limpa_datas(row):
+    out = np.zeros_like(row)
+    keep = [x for x in row if x != 0 and not ehdata(int(x))]
+    out[:len(keep)] = keep
+    return out
+
+def taxa_datas(logits_mat):
+    tot = 0; dat = 0
+    for v in logits_mat:
+        for i in sugestoes_ids(v):
+            tot += 1; dat += ehdata(i)
+    return dat / max(tot, 1)
+
+def sugestoes_ids(vetor, k=8):
+    ordem = np.argsort(-vetor); out = []
+    for i in ordem:
+        if TOP_FREQ <= i and i >= 3:
+            out.append(int(i))
+        if len(out) == k:
+            break
+    return out
+
+linhas.append("\n\n=== 4) Teste: se tirar números e nomes de meses da frase, o que muda? ===")
+Mlimpo = np.stack([limpa_datas(r) for r in M])
+Zl = np.concatenate([c.forward_np(p, Mlimpo[i:i + 256]) for i in range(0, len(Mlimpo), 256)])
+logits_l = Zl @ Wout + bout
+t_orig = taxa_datas(logits)
+t_limpo = taxa_datas(logits_l)
+linhas.append(f"  Sugestões que são datas/meses, frase original: {t_orig*100:.1f}%")
+linhas.append(f"  Sugestões que são datas/meses, frase SEM datas: {t_limpo*100:.1f}%")
+for i in range(0, 2000, 500):
+    if any(ehdata(int(x)) for x in M[i] if x != 0):
+        linhas.append(f"\nFRASE (sem datas): {' '.join(itos[int(x)] for x in Mlimpo[i] if x != 0)[:140]}")
+        linhas.append(f"  sugestões antes: {sugestoes(logits[i])}")
+        linhas.append(f"  sugestões depois: {sugestoes(logits_l[i])}")
+
 open(SAIDA, "w", encoding="utf-8").write("\n".join(linhas) + "\n")
 print("\n".join(linhas))
