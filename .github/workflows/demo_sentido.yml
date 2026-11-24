@@ -1,0 +1,38 @@
+name: demo-sentido
+
+# Demonstração do módulo de sentido só com numpy (sem torch), usando os pesos de um run de treino.
+
+on:
+  workflow_dispatch:
+    inputs:
+      run_treino:
+        description: "ID do run de treino-sentido com o artefato sentido-<id>"
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  demo:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install pyarrow numpy
+      - uses: actions/download-artifact@v4
+        with:
+          name: sentido-${{ inputs.run_treino }}
+          path: saida_sentido
+      - name: Prepara dados de teste
+        run: python3 -I grande/prepara.py dados_escala
+      - name: Demonstração
+        working-directory: escala
+        run: python3 -u demo_sentido.py ${{ github.workspace }}/saida_sentido ${{ github.workspace }}/dados_escala ${{ github.workspace }}/demo_saida.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: demo-sentido-${{ github.run_id }}
+          path: demo_saida.txt
+          retention-days: 30
