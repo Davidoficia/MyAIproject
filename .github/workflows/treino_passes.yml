@@ -1,0 +1,57 @@
+name: treino-passes
+
+# Teste de passes do Nx atual (mudança única: K, número de passes de refinamento).
+#   k4: K=4 (igual ao Nx atual)   |   k1: K=1 (preditor de uma passada)
+# Treino do zero, mesmo corpus e mesmo orçamento (100 mil passos), métricas a cada 20 mil passos.
+
+on:
+  workflow_dispatch:
+    inputs:
+      passos:
+        description: "Passos por braço"
+        default: "100000"
+        required: false
+
+permissions:
+  contents: read
+
+jobs:
+  braco:
+    runs-on: ubuntu-latest
+    timeout-minutes: 340
+    strategy:
+      fail-fast: false
+      matrix:
+        braco:
+          - { nome: k4, dim: "4" }
+          - { nome: k1, dim: "1" }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install pyarrow numpy
+      - name: Prepara Wikipédia pt
+        run: python3 -I grande/prepara.py dados_escala
+      - name: Acrescenta livros PD
+        env:
+          MAX_LIVROS_PALAVRAS: "150000000"
+        run: python3 -I escala/prepara_livros.py dados_escala
+      - name: Treina do zero (${{ matrix.braco.nome }}, K=${{ matrix.braco.dim }})
+        env:
+          DADOS: ${{ github.workspace }}/dados_escala
+          NX_K: ${{ matrix.braco.dim }}
+          PASSOS: ${{ inputs.passos }}
+          PESOS_DIR: ${{ github.workspace }}/cap_${{ matrix.braco.nome }}
+          AVALIA_CADA: "20000"
+          N_AVALIACAO: "300"
+          SALVA_A_CADA: "10000"
+        working-directory: escala
+        run: python3 -u treino_escala.py
+      - name: Mostra métricas
+        run: cat cap_${{ matrix.braco.nome }}/metricas.jsonl | python3 -c "import sys,json; [print(d['passo'], round(d['acerto_como_CI'],4), round(d['bits_por_caractere_pll'],4), round(d['taxa_unk'],4)) for d in map(json.loads, sys.stdin)]"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: passes-${{ matrix.braco.nome }}-${{ github.run_id }}
+          path: cap_${{ matrix.braco.nome }}/metricas.jsonl
+          retention-days: 30
