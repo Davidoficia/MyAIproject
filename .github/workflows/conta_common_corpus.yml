@@ -1,0 +1,36 @@
+name: conta-common-corpus
+
+# Conta, numa amostra em streaming, quantos documentos em português com domínio público
+# existem no PleIAs/common_corpus. Antes de qualquer treino com esse dataset.
+
+on:
+  workflow_dispatch:
+    inputs:
+      amostra:
+        description: "Quantos documentos ler"
+        default: "200000"
+        required: false
+
+permissions:
+  contents: read
+
+jobs:
+  conta:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install datasets
+      - name: Conta documentos PT/domínio público
+        env:
+          N: ${{ inputs.amostra }}
+        working-directory: escala
+        run: python3 -u conta_common_corpus.py ${{ github.workspace }}/conta_cc.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: conta-cc-${{ github.run_id }}
+          path: conta_cc.json
+          retention-days: 30
