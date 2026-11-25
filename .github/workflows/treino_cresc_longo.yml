@@ -62,7 +62,16 @@ jobs:
           RAIOS: ${{ matrix.braco.raios }}
           JANELA_MAX: ${{ matrix.braco.jmax }}
         working-directory: escala
-        run: python3 -I gera_amostras.py ${{ github.workspace }}/cap_${{ matrix.braco.nome }} ${{ github.workspace }}/amostras_${{ matrix.braco.nome }}.txt 20
+        run: python3 gera_amostras.py ${{ github.workspace }}/cap_${{ matrix.braco.nome }} ${{ github.workspace }}/amostras_${{ matrix.braco.nome }}.txt 20
+      - name: Sobe os pesos (para gerar texto sem retreinar)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pesos-${{ matrix.braco.nome }}-s${{ inputs.semente || '0' }}-${{ github.run_id }}
+          path: |
+            cap_${{ matrix.braco.nome }}/ckpt_cresc.npz
+            cap_${{ matrix.braco.nome }}/itos.json
+          retention-days: 30
       - uses: actions/upload-artifact@v4
         with:
           name: longo-${{ matrix.braco.nome }}-s${{ inputs.semente || '0' }}-${{ github.run_id }}
