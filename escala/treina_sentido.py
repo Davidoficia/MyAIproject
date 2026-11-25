@@ -21,8 +21,8 @@ POOL = os.environ.get("POOL", "mean")     # mean | att (resumo da frase)
 CTX = int(os.environ.get("CTX", "1"))        # frases de contexto: 1 ou 3
 WARMUP = int(os.environ.get("WARMUP", "0"))  # passos de aquecimento da taxa (0 = sem)
 ARM = os.environ.get("ARM", "solo")          # nome do braço (para o medidor)
-NA = N * CTX                                 # largura da entrada (contexto)
 VOC, N, D = 8000, 60, 64
+NA = N * CTX   # largura da entrada (contexto)
 TOK = re.compile(r"\w+|[^\w\s]")
 torch.manual_seed(0)
 os.makedirs(SAIDA, exist_ok=True)
