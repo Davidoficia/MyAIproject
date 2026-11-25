@@ -1,0 +1,48 @@
+name: sentido-en
+
+# Motor de sentido só em inglês (sem português), configuração BASE, para comparar com o BASE em português.
+# Dados: escala/prepara_en.py (public_library_1929_dolma). Atenção: a licença dos metadados é imprecisa
+# e domínio público nos EUA (pré-1929) não garante domínio público no Brasil.
+
+on:
+  workflow_dispatch:
+    inputs:
+      passos:
+        description: "Passos de treino"
+        default: "40000"
+        required: false
+
+permissions:
+  contents: read
+
+jobs:
+  treino:
+    runs-on: ubuntu-latest
+    timeout-minutes: 340
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Instala dependências
+        run: pip install pyarrow numpy torch --index-url https://download.pytorch.org/whl/cpu --extra-index-url https://pypi.org/simple
+      - name: Prepara inglês (public_library_1929_dolma)
+        run: python3 -I escala/prepara_en.py dados_en
+      - name: Treina sentido em inglês (BASE)
+        env:
+          ARM: EN_BASE
+          POOL: mean
+          CTX: "1"
+          LOTE: "64"
+          WARMUP: "0"
+          DADOS: ${{ github.workspace }}/dados_en
+          PASSOS: ${{ inputs.passos || '40000' }}
+          EVAL_CADA: "10000"
+          SAIDA: ${{ github.workspace }}/saida_en
+        working-directory: escala
+        run: mkdir -p $SAIDA && python3 -u treina_sentido.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sentido-en-${{ github.run_id }}
+          path: saida_en/
+          retention-days: 30
