@@ -2,7 +2,7 @@ name: compara-nx
 
 # Compara dois checkpoints do Nx no MESMO conjunto de teste do CI (split por artigo):
 #   R1 = primeira rodada (477 mil passos, commit 1443463 da branch escala-ck)
-#   R2 = atual (1,43 milhão de passos, commit 6c9d483)
+#   R2 = atual (1,43 milhão de passos, commit 6c9d483, branch pesos-r2)
 # Usa escala/diagnosticos.py. Sem -I: o script importa nx_variantes da própria pasta.
 
 on:
@@ -27,6 +27,7 @@ jobs:
       - name: Pega os checkpoints da branch escala-ck
         run: |
           git fetch origin escala-ck
+          git fetch origin pesos-r2
           mkdir -p pesos_r1 pesos_r2
           git show 1443463:pesos/ckpt_base.npz > pesos_r1/ckpt_base.npz
           git show 1443463:pesos/itos.json > pesos_r1/itos.json
