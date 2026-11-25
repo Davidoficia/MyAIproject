@@ -1,0 +1,74 @@
+name: medidor-sentido
+
+# Todas as melhorias do motor de sentido de uma vez, com medidor de peças.
+# Braços: BASE (nada), TUDO (atenção no resumo + lote 256 com aquecimento + contexto de 3 frases),
+# e TUDO menos uma peça de cada vez (SEM_POOL, SEM_OTIM, SEM_CTX). Contribuição = TUDO − SEM_peça.
+
+on:
+  workflow_dispatch:
+    inputs:
+      passos:
+        description: "Passos por braço"
+        default: "40000"
+        required: false
+
+permissions:
+  contents: read
+
+jobs:
+  braco:
+    runs-on: ubuntu-latest
+    timeout-minutes: 340
+    strategy:
+      fail-fast: false
+      matrix:
+        braco:
+          - { nome: BASE,     pool: "mean", ctx: "1", lote: "64",  warm: "0" }
+          - { nome: TUDO,     pool: "att",  ctx: "3", lote: "256", warm: "2000" }
+          - { nome: SEM_POOL, pool: "mean", ctx: "3", lote: "256", warm: "2000" }
+          - { nome: SEM_OTIM, pool: "att",  ctx: "3", lote: "64",  warm: "0" }
+          - { nome: SEM_CTX,  pool: "att",  ctx: "1", lote: "256", warm: "2000" }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Instala dependências
+        run: pip install pyarrow numpy torch --index-url https://download.pytorch.org/whl/cpu --extra-index-url https://pypi.org/simple
+      - name: Prepara Wikipédia pt
+        run: python3 -I grande/prepara.py dados_escala
+      - name: Acrescenta livros PD
+        env:
+          MAX_LIVROS_PALAVRAS: "150000000"
+        run: python3 -I escala/prepara_livros.py dados_escala
+      - name: Treina sentido (braço ${{ matrix.braco.nome }})
+        env:
+          ARM: ${{ matrix.braco.nome }}
+          POOL: ${{ matrix.braco.pool }}
+          CTX: ${{ matrix.braco.ctx }}
+          LOTE: ${{ matrix.braco.lote }}
+          WARMUP: ${{ matrix.braco.warm }}
+          DADOS: ${{ github.workspace }}/dados_escala
+          PASSOS: ${{ inputs.passos || '40000' }}
+          EVAL_CADA: "10000"
+          SAIDA: ${{ github.workspace }}/saida_${{ matrix.braco.nome }}
+        working-directory: escala
+        run: mkdir -p $SAIDA && python3 -u treina_sentido.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: res-${{ matrix.braco.nome }}
+          path: saida_${{ matrix.braco.nome }}/resultado.json
+          retention-days: 30
+
+  medidor:
+    needs: braco
+    runs-on: ubuntu-latest
+    if: always()
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: res-*
+          path: resultados
+      - name: Mede a contribuição de cada peça
+        run: python3 escala/medidor_sentido.py resultados

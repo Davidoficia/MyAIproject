@@ -78,7 +78,7 @@ def forward_np(p, ids, H=4):
 
 
 # ---------------- torch (treino) ----------------
-def forward_torch(tp, ids, H=4):
+def forward_torch(tp, ids, H=4, pool="mean"):
     import torch
     import torch.nn.functional as F_
     B, N = ids.shape
@@ -99,6 +99,10 @@ def forward_torch(tp, ids, H=4):
         g = 0.5 * u * (1 + torch.tanh(math.sqrt(2 / math.pi) * (u + 0.044715 * u ** 3)))
         x = x + g @ tp[f"W2_{l}"] + tp[f"b2_{l}"]
     x = F_.layer_norm(x, (D,), tp["lnfg"], tp["lnfb"], EPS)
+    if pool == "att":   # resumo por atenção: cada palavra vota com um peso aprendido (wq)
+        sc = (x @ tp["wq"]).masked_fill(~mask, -1e9)
+        w = torch.softmax(sc, 1)
+        return (w.unsqueeze(-1) * x).sum(1)
     m = mask[..., None].to(x.dtype)
     return (x * m).sum(1) / m.sum(1).clamp(min=1)
 

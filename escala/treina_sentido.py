@@ -17,6 +17,11 @@ LR = float(os.environ.get("LR", "3e-4"))
 MAX_LINHAS = int(os.environ.get("MAX_LINHAS", "1000000"))
 EVAL_CADA = int(os.environ.get("EVAL_CADA", "1000"))
 SAIDA = os.environ.get("SAIDA", "saida_sentido")
+POOL = os.environ.get("POOL", "mean")     # mean | att (resumo da frase)
+CTX = int(os.environ.get("CTX", "1"))        # frases de contexto: 1 ou 3
+WARMUP = int(os.environ.get("WARMUP", "0"))  # passos de aquecimento da taxa (0 = sem)
+ARM = os.environ.get("ARM", "solo")          # nome do braço (para o medidor)
+NA = N * CTX                                 # largura da entrada (contexto)
 VOC, N, D = 8000, 60, 64
 TOK = re.compile(r"\w+|[^\w\s]")
 torch.manual_seed(0)
@@ -53,7 +58,15 @@ def frases(caminho, stoi, limite):
 
 
 def pares(M):
-    return M[:-1], M[1:]          # A = frase i, B = frase i+1 (mesmo artigo na maioria dos casos)
+    if CTX == 1:
+        return M[:-1], M[1:]      # A = frase i, B = frase i+1 (mesmo artigo na maioria dos casos)
+    idx = np.arange(CTX - 1, len(M) - 1)   # A = frases i-2..i (CTX=3), B = frase i+1
+    A = np.concatenate([M[idx - k] for k in range(CTX - 1, -1, -1)], axis=1)
+    return A, M[idx + 1]
+
+
+def fwd(tp, ids):
+    return c.forward_torch(tp, ids, pool=POOL)
 
 
 def alvo(B_ids, V):
@@ -70,7 +83,7 @@ def avalia(tp, Wout, bout, A, Bm, ctrl=False, prior=None):
     """ctrl=True: usa o z de uma frase ~1000 posições antes (outro artigo, pois o teste está em ordem de artigo)."""
     with torch.no_grad():
         if prior is None:
-            Z = torch.cat([c.forward_torch(tp, torch.from_numpy(A[i:i + 512])) for i in range(0, len(A), 512)])
+            Z = torch.cat([fwd(tp, torch.from_numpy(A[i:i + 512])) for i in range(0, len(A), 512)])
             if ctrl:
                 Z = torch.roll(Z, 1000, 0)
             LOG_ALL = Z @ Wout + bout
@@ -109,7 +122,7 @@ def perturba(M, seed=1):
                 else:
                     j += 1
             ids = keep
-        out[i, :min(len(ids), N)] = ids[:N]
+        out[i, :min(len(ids), M.shape[1])] = ids[:M.shape[1]]
     return out
 
 
@@ -121,7 +134,9 @@ if __name__ == "__main__":
     Atr, Btr = pares(Mtr); Ate, Bte = pares(Mte)
     print(f"V={V_} pares treino={len(Atr)} teste={len(Ate)}", flush=True)
     rng = np.random.default_rng(0)
-    p0 = c.init(rng, V_, D=D, N=N, L=2, H=4, F=128)
+    p0 = c.init(rng, V_, D=D, N=NA, L=2, H=4, F=128)
+    if POOL == "att":
+        p0["wq"] = rng.normal(0, 1 / math.sqrt(D), (D,))
     tp = {k: torch.tensor(v, dtype=torch.float32, requires_grad=True) for k, v in p0.items()}
     Wout = torch.tensor(rng.normal(0, 1 / math.sqrt(D), (D, V_)), dtype=torch.float32, requires_grad=True)
     bout = torch.zeros(V_, requires_grad=True)
@@ -134,9 +149,12 @@ if __name__ == "__main__":
     for passo in range(1, PASSOS + 1):
         idx = np.random.default_rng([0, passo]).integers(0, len(Atr), LOTE)
         a = torch.from_numpy(Atr[idx]); b = torch.from_numpy(Btr[idx])
-        z = c.forward_torch(tp, a)
+        z = fwd(tp, a)
         logp = torch.log_softmax(z @ Wout + bout, dim=1)
         loss = -(alvo(b, V_) * logp).sum(1).mean()
+        if WARMUP:
+            for g_ in opt.param_groups:
+                g_["lr"] = LR * min(1.0, passo / WARMUP)
         opt.zero_grad(); loss.backward(); opt.step()
         if passo % EVAL_CADA == 0 or passo == PASSOS:
             r_real = avalia(tp, Wout.detach(), bout.detach(), Ate, Bte)
@@ -155,11 +173,11 @@ if __name__ == "__main__":
         j = (i + 1000) % len(Ate)
         a = [x for x in Ate[i] if x != 0]; b = [x for x in Ate[j] if x != 0]
         m = a[:max(1, len(a) // 2)] + b[:max(1, len(b) // 2)]
-        mistura[i, :min(len(m), N)] = m[:N]
+        mistura[i, :min(len(m), Ate.shape[1])] = m[:Ate.shape[1]]
     r_mistura = avalia(tp, Wout.detach(), bout.detach(), mistura, Bte)
     print(f"ambiguidade (frases curtas, n={int(curtas.sum())}): recall@50 {r_curtas:.4f}", flush=True)
     print(f"vários temas (mistura de dois artigos): recall@50 {r_mistura:.4f} (original {r_real:.4f})", flush=True)
-    res = {"passos": PASSOS, "recall50_real": r_real, "recall50_controle": r_ctrl, "recall50_prior": r_prior, "recall50_alterada": r_pert, "recall50_curtas": r_curtas, "recall50_mistura": r_mistura, "V": V_}
+    res = {"arm": ARM, "pool": POOL, "ctx": CTX, "warmup": WARMUP, "lote": LOTE, "passos": PASSOS, "recall50_real": r_real, "recall50_controle": r_ctrl, "recall50_prior": r_prior, "recall50_alterada": r_pert, "recall50_curtas": r_curtas, "recall50_mistura": r_mistura, "V": V_}
     print(json.dumps(res), flush=True)
     json.dump(res, open(f"{SAIDA}/resultado.json", "w"))
     out = {k: v.detach().double().numpy() for k, v in tp.items()}
