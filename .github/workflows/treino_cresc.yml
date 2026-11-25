@@ -1,0 +1,58 @@
+name: treino-cresc
+
+# Teste de janela crescente: A = passes com raio 2,4,6,8 | B = base (Nx atual, raio 2) | C = 1 passe com raio 8 (mesmo nº de parâmetros que A).
+#   A: cresc 2,4,6,8   |   B: base   |   C: cresc só raio 8
+# Treino do zero, mesmo corpus e mesmo orçamento (100 mil passos), métricas a cada 20 mil passos.
+
+on:
+  workflow_dispatch:
+    inputs:
+      passos:
+        description: "Passos por braço"
+        default: "100000"
+        required: false
+
+permissions:
+  contents: read
+
+jobs:
+  braco:
+    runs-on: ubuntu-latest
+    timeout-minutes: 340
+    strategy:
+      fail-fast: false
+      matrix:
+        braco:
+          - { nome: A, var: "cresc", raios: "2,4,6,8", jmax: "8" }
+          - { nome: B, var: "base", raios: "2,4,6,8", jmax: "2" }
+          - { nome: C, var: "cresc", raios: "8", jmax: "8" }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install pyarrow numpy
+      - name: Prepara Wikipédia pt
+        run: python3 -I grande/prepara.py dados_escala
+      - name: Acrescenta livros PD
+        env:
+          MAX_LIVROS_PALAVRAS: "150000000"
+        run: python3 -I escala/prepara_livros.py dados_escala
+      - name: Treina do zero (braço ${{ matrix.braco.nome }})
+        env:
+          DADOS: ${{ github.workspace }}/dados_escala
+          VARIANTE: ${{ matrix.braco.var }}
+          RAIOS: ${{ matrix.braco.raios }}
+          JANELA_MAX: ${{ matrix.braco.jmax }}
+          PASSOS: ${{ inputs.passos }}
+          PESOS_DIR: ${{ github.workspace }}/cap_${{ matrix.braco.nome }}
+          AVALIA_CADA: "20000"
+          N_AVALIACAO: "300"
+          SALVA_A_CADA: "10000"
+        working-directory: escala
+        run: python3 -u treino_escala.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: cresc-${{ matrix.braco.nome }}-${{ github.run_id }}
+          path: cap_${{ matrix.braco.nome }}/metricas.jsonl
+          retention-days: 30

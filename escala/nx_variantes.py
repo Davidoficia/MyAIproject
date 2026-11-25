@@ -16,6 +16,8 @@ sys.setrecursionlimit(20000)
 D, HD, HEADS, HA, M, R, HL, K = 32, 128, 2, 16, 3, 2, 32, 4
 D = int(os.environ.get("NX_D", str(D)))   # teste de capacidade (padrão 32, igual ao Nx atual)
 K = int(os.environ.get("NX_K", str(K)))   # teste de passes (padrão 4, igual ao Nx atual)
+RAIOS = [int(x) for x in os.environ.get("RAIOS", "2,4,6,8").split(",")]   # variante cresc: raio de cada passe
+RM = max(RAIOS)
 PAD, UNK, MASK = 0, 1, 2
 DT = np.float64   # float32 no treino longo (main), float64 no gradcheck
 
@@ -152,7 +154,7 @@ def backward(loss):
 def init(V, variante, rng):
     p = {}
     p["E"] = T(rng.normal(0, 0.1, (V, D))); p["E"].d[PAD] = 0
-    nin = 5 * D + (HEADS * D if variante in ("mh", "tudo") else 0)
+    nin = (2 * RM + 1) * D if variante == "cresc" else 5 * D + (HEADS * D if variante in ("mh", "tudo") else 0)
     p["W1"] = T(rng.normal(0, 1 / np.sqrt(nin), (nin, HD)))
     p["b1"] = T(np.zeros((1, HD)))
     p["W2"] = T(rng.normal(0, 1 / np.sqrt(HD), (HD, V)))
@@ -178,7 +180,25 @@ def init(V, variante, rng):
     return p
 
 
+def passes_cresc(p, ids, raios):
+    """Janela crescente: o passe r enxerga até r palavras de cada lado (as de fora entram zeradas)."""
+    B = ids.shape[0]; E = p["E"]; V = E.d.shape[0]
+    pos_ctx = [j for j in range(2 * RM + 1) if j != RM]
+    ctx = [embed(E, ids[:, j]) for j in pos_ctx]
+    dist = [abs(j - RM) for j in pos_ctx]
+    P = T(np.full((B, V), 1.0 / V))
+    for r in raios:
+        Xc = matmul(P, E)
+        partes = [mul(xk, T(np.full((1, 1), 1.0 if d <= r else 0.0))) for xk, d in zip(ctx, dist)]
+        F = concat(partes[:RM] + [Xc] + partes[RM:])
+        H = tanh(add(matmul(F, p["W1"]), p["b1"]))
+        P = softmax(add(matmul(H, p["W2"]), p["b2"]))
+    return P
+
+
 def passes(p, variante, ids, K_):
+    if variante == "cresc":
+        return passes_cresc(p, ids, RAIOS)
     B = ids.shape[0]; E = p["E"]; V = E.d.shape[0]
     ctx = [embed(E, ids[:, 0]), embed(E, ids[:, 1]), embed(E, ids[:, 3]), embed(E, ids[:, 4])]
     P = T(np.full((B, V), 1.0 / V))

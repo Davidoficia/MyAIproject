@@ -23,6 +23,7 @@ SALVA = int(os.environ.get("SALVA_A_CADA", "2000"))
 TEMPO_MAX = float(os.environ.get("TEMPO_MAX_MIN", "1e9")) * 60
 SEMENTE = 0
 K = n.K
+R = int(os.environ.get("JANELA_MAX", "2"))   # raio da janela no treino/métricas (padrão 2 = Nx atual)
 os.makedirs(PESOS, exist_ok=True)
 T_INI = time.time()
 ARQ_ESTADO = os.path.join(PESOS, "estado.npz")
@@ -82,12 +83,12 @@ def janelas(flat, off, r, Bn):
         y = flat[g].astype(np.int64)
         ok = y >= 3
         g, ini, fim, y = g[ok][:faltam], ini[ok][:faltam], fim[ok][:faltam], y[ok][:faltam]
-        win = np.full((len(g), 5), n.PAD, dtype=np.int64)
-        for k in range(-2, 3):
+        win = np.full((len(g), 2 * R + 1), n.PAD, dtype=np.int64)
+        for k in range(-R, R + 1):
             pos = g + k
             inside = (pos >= ini) & (pos < fim)
-            win[:, k + 2] = np.where(inside, flat[np.clip(pos, 0, len(flat) - 1)], n.PAD)
-        win[:, 2] = n.MASK
+            win[:, k + R] = np.where(inside, flat[np.clip(pos, 0, len(flat) - 1)], n.PAD)
+        win[:, R] = n.MASK
         xs.append(win); ys.append(y); faltam -= len(g)
     return np.concatenate(xs), np.concatenate(ys)
 
@@ -115,8 +116,8 @@ def metricas(p, passo):
             continue
         chars += len(txt.replace(" ", "")); ntok += len(ids); nunk += sum(1 for i in ids if i == n.UNK)
         for j in range(len(ids)):
-            w = [ids[k] if 0 <= k < len(ids) else n.PAD for k in range(j - 2, j + 3)]
-            w[2] = n.MASK
+            w = [ids[k] if 0 <= k < len(ids) else n.PAD for k in range(j - R, j + R + 1)]
+            w[R] = n.MASK
             Xs.append(w); ys.append(ids[j]); pos.append(min(j, 15))
     X = np.array(Xs, dtype=np.int64); Y = np.array(ys, dtype=np.int64); P_ = np.array(pos)
     probs = []
