@@ -26,6 +26,7 @@ jobs:
         run: pip install pyarrow numpy
       - name: Pega os checkpoints da branch escala-ck
         run: |
+          git fetch origin escala-ck
           mkdir -p pesos_r1 pesos_r2
           git show 1443463:pesos/ckpt_base.npz > pesos_r1/ckpt_base.npz
           git show 1443463:pesos/itos.json > pesos_r1/itos.json
