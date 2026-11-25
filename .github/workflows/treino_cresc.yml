@@ -34,20 +34,25 @@ jobs:
           - { nome: A, var: "cresc", raios: "2,4,6,8", jmax: "8" }
           - { nome: B, var: "base", raios: "2,4,6,8", jmax: "2" }
           - { nome: C, var: "cresc", raios: "8", jmax: "8" }
-    if: contains(inputs.bracos || 'A,B,C', matrix.braco.nome)
     steps:
       - uses: actions/checkout@v4
+        if: contains(inputs.bracos || 'A,B,C', matrix.braco.nome)
       - uses: actions/setup-python@v5
+        if: contains(inputs.bracos || 'A,B,C', matrix.braco.nome)
         with:
           python-version: "3.11"
       - run: pip install pyarrow numpy
+        if: contains(inputs.bracos || 'A,B,C', matrix.braco.nome)
       - name: Prepara Wikipédia pt
+        if: contains(inputs.bracos || 'A,B,C', matrix.braco.nome)
         run: python3 -I grande/prepara.py dados_escala
       - name: Acrescenta livros PD
+        if: contains(inputs.bracos || 'A,B,C', matrix.braco.nome)
         env:
           MAX_LIVROS_PALAVRAS: "150000000"
         run: python3 -I escala/prepara_livros.py dados_escala
       - name: Treina do zero (braço ${{ matrix.braco.nome }})
+        if: contains(inputs.bracos || 'A,B,C', matrix.braco.nome)
         env:
           DADOS: ${{ github.workspace }}/dados_escala
           VARIANTE: ${{ matrix.braco.var }}
@@ -62,6 +67,7 @@ jobs:
         working-directory: escala
         run: python3 -u treino_escala.py
       - uses: actions/upload-artifact@v4
+        if: contains(inputs.bracos || 'A,B,C', matrix.braco.nome)
         with:
           name: cresc-${{ matrix.braco.nome }}-s${{ inputs.semente || '0' }}-${{ github.run_id }}
           path: cap_${{ matrix.braco.nome }}/metricas.jsonl
