@@ -21,7 +21,7 @@ VAR = os.environ.get("VARIANTE", "base")
 PESOS = os.environ.get("PESOS_DIR", "pesos")
 SALVA = int(os.environ.get("SALVA_A_CADA", "2000"))
 TEMPO_MAX = float(os.environ.get("TEMPO_MAX_MIN", "1e9")) * 60
-SEMENTE = 0
+SEMENTE = int(os.environ.get("SEMENTE", "0"))   # semente dos pesos e dos lotes (padrão 0)
 K = n.K
 R = int(os.environ.get("JANELA_MAX", "2"))   # raio da janela no treino/métricas (padrão 2 = Nx atual)
 os.makedirs(PESOS, exist_ok=True)

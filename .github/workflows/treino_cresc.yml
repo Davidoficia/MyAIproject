@@ -11,6 +11,14 @@ on:
         description: "Passos por braço"
         default: "100000"
         required: false
+      bracos:
+        description: "Quais braços rodar (ex.: A,B,C ou A,C)"
+        default: "A,B,C"
+        required: false
+      semente:
+        description: "Semente dos pesos e dos lotes"
+        default: "0"
+        required: false
 
 permissions:
   contents: read
@@ -26,6 +34,7 @@ jobs:
           - { nome: A, var: "cresc", raios: "2,4,6,8", jmax: "8" }
           - { nome: B, var: "base", raios: "2,4,6,8", jmax: "2" }
           - { nome: C, var: "cresc", raios: "8", jmax: "8" }
+    if: contains(inputs.bracos || 'A,B,C', matrix.braco.nome)
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -45,6 +54,7 @@ jobs:
           RAIOS: ${{ matrix.braco.raios }}
           JANELA_MAX: ${{ matrix.braco.jmax }}
           PASSOS: ${{ inputs.passos }}
+          SEMENTE: ${{ inputs.semente || '0' }}
           PESOS_DIR: ${{ github.workspace }}/cap_${{ matrix.braco.nome }}
           AVALIA_CADA: "20000"
           N_AVALIACAO: "300"
@@ -53,6 +63,6 @@ jobs:
         run: python3 -u treino_escala.py
       - uses: actions/upload-artifact@v4
         with:
-          name: cresc-${{ matrix.braco.nome }}-${{ github.run_id }}
+          name: cresc-${{ matrix.braco.nome }}-s${{ inputs.semente || '0' }}-${{ github.run_id }}
           path: cap_${{ matrix.braco.nome }}/metricas.jsonl
           retention-days: 30
