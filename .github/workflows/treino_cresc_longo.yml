@@ -1,0 +1,72 @@
+name: treino-cresc-longo
+
+# Braço longo da janela crescente (raio por lado, até 26):
+#   AL = 8 passes, raios 2,4,6,8,12,16,20,26 (começa igual ao A medido, depois sobe)
+#   CL = controle: 1 passe com raio 26 (mesma entrada de 53 palavras que AL)
+# Treino do zero, 100 mil passos, métricas a cada 20 mil e amostras de texto no fim.
+
+on:
+  workflow_dispatch:
+    inputs:
+      passos:
+        description: "Passos por braço"
+        default: "100000"
+        required: false
+      semente:
+        description: "Semente dos pesos e dos lotes"
+        default: "0"
+        required: false
+
+permissions:
+  contents: read
+
+jobs:
+  braco:
+    runs-on: ubuntu-latest
+    timeout-minutes: 340
+    strategy:
+      fail-fast: false
+      matrix:
+        braco:
+          - { nome: AL, var: "cresc", raios: "2,4,6,8,12,16,20,26", jmax: "26" }
+          - { nome: CL, var: "cresc", raios: "26", jmax: "26" }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install pyarrow numpy
+      - name: Prepara Wikipédia pt
+        run: python3 -I grande/prepara.py dados_escala
+      - name: Acrescenta livros PD
+        env:
+          MAX_LIVROS_PALAVRAS: "150000000"
+        run: python3 -I escala/prepara_livros.py dados_escala
+      - name: Treina do zero (braço ${{ matrix.braco.nome }})
+        env:
+          DADOS: ${{ github.workspace }}/dados_escala
+          VARIANTE: ${{ matrix.braco.var }}
+          RAIOS: ${{ matrix.braco.raios }}
+          JANELA_MAX: ${{ matrix.braco.jmax }}
+          PASSOS: ${{ inputs.passos }}
+          SEMENTE: ${{ inputs.semente || '0' }}
+          PESOS_DIR: ${{ github.workspace }}/cap_${{ matrix.braco.nome }}
+          AVALIA_CADA: "20000"
+          N_AVALIACAO: "300"
+          SALVA_A_CADA: "10000"
+        working-directory: escala
+        run: python3 -u treino_escala.py
+      - name: Gera amostras de texto (braço ${{ matrix.braco.nome }})
+        env:
+          VARIANTE: ${{ matrix.braco.var }}
+          RAIOS: ${{ matrix.braco.raios }}
+          JANELA_MAX: ${{ matrix.braco.jmax }}
+        working-directory: escala
+        run: python3 -I gera_amostras.py ${{ github.workspace }}/cap_${{ matrix.braco.nome }} ${{ github.workspace }}/amostras_${{ matrix.braco.nome }}.txt 20
+      - uses: actions/upload-artifact@v4
+        with:
+          name: longo-${{ matrix.braco.nome }}-s${{ inputs.semente || '0' }}-${{ github.run_id }}
+          path: |
+            cap_${{ matrix.braco.nome }}/metricas.jsonl
+            amostras_${{ matrix.braco.nome }}.txt
+          retention-days: 30
