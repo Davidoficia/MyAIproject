@@ -14,13 +14,23 @@ tp = {k: torch.tensor(z[k], dtype=torch.float32) for k in z.files if k not in ("
 Wout = torch.tensor(z["Wout"], dtype=torch.float32)
 bout = torch.tensor(z["bout"], dtype=torch.float32)
 
-M = ts.frases(os.path.join(ts.DIR, "teste.txt"), stoi, 3000)
-A, B = ts.pares(M)
-idx = np.random.default_rng(0).choice(len(A), 6, replace=False)
+if os.environ.get("TEXTOS"):
+    # texto próprio (uma frase por linha, em ordem): todas as janelas de 3 frases
+    rows = []
+    for l in open(os.environ["TEXTOS"], encoding="utf-8"):
+        if l.strip():
+            ids = [stoi.get(w, ts.c.PAD + 1) for w in ts.tokens(l)]
+            r = np.zeros(ts.N, dtype=np.int64); r[:min(len(ids), ts.N)] = ids[:ts.N]; rows.append(r)
+    A, B = ts.pares(np.stack(rows))
+    idx = np.arange(len(A))
+else:
+    M = ts.frases(os.path.join(ts.DIR, "teste.txt"), stoi, 3000)
+    A, B = ts.pares(M)
+    idx = np.random.default_rng(0).choice(len(A), 6, replace=False)
 with torch.no_grad():
     logits = (ts.fwd(tp, torch.from_numpy(A[idx])) @ Wout + bout).numpy()
 
-out = ["## O que o sentido prevê (elo)", "", "Não gera frases: mostra as palavras que ele acha que vêm a seguir.", ""]
+out = ["## O que o sentido prevê (elo)", "", "Não gera frases: mostra as palavras que ele acha que vêm a seguir.", f"Fonte: {os.environ.get('TEXTOS', 'teste (Wikipédia, artigos fora do treino)')}", ""]
 for k, i in enumerate(idx):
     ctx = " ".join(itos[t] for t in A[i] if t > 2)
     real = sorted({itos[t] for t in B[i] if t > 2 and t >= 203})

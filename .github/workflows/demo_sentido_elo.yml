@@ -8,6 +8,10 @@ on:
       origem:
         description: "run_id do elo da cadeia"
         required: true
+      textos:
+        description: "arquivo de textos próprios (vazio = teste do CI)"
+        default: ""
+        required: false
 
 permissions:
   contents: read
@@ -38,5 +42,6 @@ jobs:
           DADOS: ${{ github.workspace }}/dados_escala
           POOL: att
           CTX: "3"
+          TEXTOS: ${{ inputs.textos }}
         working-directory: escala
         run: python3 -u demo_sentido_elo.py
