@@ -1,0 +1,64 @@
+name: treino-bloco
+
+# Blocos de 5 contas CDU ligadas por < (resultado sobe) ou > (desce).
+#   pad   = passo fixo k dentro do bloco, direção fixa no bloco
+#   aleat = contas aleatórias, separador só mostra a direção do próximo resultado
+# Dados: escala/dados_bloco (15 mil blocos cada, 80/20). Treino do zero, janela crescente até 14.
+
+on:
+  workflow_dispatch:
+    inputs:
+      passos:
+        description: "Passos por braço"
+        default: "60000"
+        required: false
+      semente:
+        description: "Semente dos pesos e dos lotes"
+        default: "0"
+        required: false
+
+permissions:
+  contents: read
+
+jobs:
+  braco:
+    runs-on: ubuntu-latest
+    timeout-minutes: 340
+    strategy:
+      fail-fast: false
+      matrix:
+        braco:
+          - { nome: pad, var: "cresc" }
+          - { nome: aleat, var: "cresc" }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install numpy
+      - name: Treina do zero (${{ matrix.braco.nome }})
+        env:
+          DADOS: ${{ github.workspace }}/escala/dados_bloco/${{ matrix.braco.nome }}
+          VARIANTE: ${{ matrix.braco.var }}
+          RAIOS: "1,2,3,4,6,8,10,12,14"
+          JANELA_MAX: "14"
+          PASSOS: ${{ inputs.passos }}
+          SEMENTE: ${{ inputs.semente || '0' }}
+          PESOS_DIR: ${{ github.workspace }}/cap_${{ matrix.braco.nome }}
+          AVALIA_CADA: "20000"
+          N_AVALIACAO: "300"
+          SALVA_A_CADA: "10000"
+        working-directory: escala
+        run: python3 -u treino_escala.py
+      - name: Avalia (dígitos do resultado e separadores)
+        env:
+          RAIOS: "1,2,3,4,6,8,10,12,14"
+        working-directory: escala
+        run: python3 avalia_bloco.py ${{ github.workspace }}/cap_${{ matrix.braco.nome }} cresc 14 ${{ github.workspace }}/escala/dados_bloco/${{ matrix.braco.nome }}/teste.txt | tee ${{ github.workspace }}/resultado_${{ matrix.braco.nome }}.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: bloco-${{ matrix.braco.nome }}-s${{ inputs.semente || '0' }}-${{ github.run_id }}
+          path: |
+            cap_${{ matrix.braco.nome }}/metricas.jsonl
+            resultado_${{ matrix.braco.nome }}.txt
+          retention-days: 30
