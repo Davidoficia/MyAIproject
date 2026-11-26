@@ -1,0 +1,42 @@
+name: demo-sentido-elo
+
+# Baixa os pesos de um elo da cadeia (run_id) e mostra o que o motor de sentido prevê para frases do teste.
+
+on:
+  workflow_dispatch:
+    inputs:
+      origem:
+        description: "run_id do elo da cadeia"
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  demo:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Instala dependências
+        run: pip install pyarrow numpy torch --index-url https://download.pytorch.org/whl/cpu --extra-index-url https://pypi.org/simple
+      - name: Prepara Wikipédia pt (para o teste)
+        run: python3 -I grande/prepara.py dados_escala
+      - name: Baixa os pesos do elo
+        uses: actions/download-artifact@v4
+        with:
+          name: sentido-cadeia-${{ inputs.origem }}
+          path: elo
+          run-id: ${{ inputs.origem }}
+          github-token: ${{ github.token }}
+      - name: Mostra o que o sentido prevê
+        env:
+          SAIDA: ${{ github.workspace }}/elo
+          DADOS: ${{ github.workspace }}/dados_escala
+          POOL: att
+          CTX: "3"
+        working-directory: escala
+        run: python3 -u demo_sentido_elo.py
