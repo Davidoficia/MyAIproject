@@ -23,6 +23,8 @@ WARMUP = int(os.environ.get("WARMUP", "0"))  # passos de aquecimento da taxa (0 
 ARM = os.environ.get("ARM", "solo")          # nome do braço (para o medidor)
 VOC, N, D = 8000, 60, 64
 NA = N * CTX   # largura da entrada (contexto)
+INICIO = os.environ.get("INICIO", "")        # pesos do elo anterior (cadeia); vazio = do zero
+PASSO_BASE = int(os.environ.get("PASSO_BASE", "0"))  # passos já feitos em elos anteriores
 TOK = re.compile(r"\w+|[^\w\s]")
 torch.manual_seed(0)
 os.makedirs(SAIDA, exist_ok=True)
@@ -144,6 +146,14 @@ if __name__ == "__main__":
     prior = torch.tensor(np.log(cont / cont.sum()), dtype=torch.float32).unsqueeze(0)
     r_prior = avalia(None, None, None, Ate, Bte, prior=prior)
     print(f"baseline prior (sem sentido) recall@50 = {r_prior:.4f}", flush=True)
+    if INICIO:
+        z_ini = np.load(INICIO)
+        with torch.no_grad():
+            for k in tp:
+                tp[k].copy_(torch.tensor(z_ini[k], dtype=torch.float32))
+            Wout.copy_(torch.tensor(z_ini["Wout"], dtype=torch.float32))
+            bout.copy_(torch.tensor(z_ini["bout"], dtype=torch.float32))
+        print(f"pesos do elo anterior carregados: {INICIO}", flush=True)
     params = list(tp.values()) + [Wout, bout]
     opt = torch.optim.Adam(params, lr=LR)
     for passo in range(1, PASSOS + 1):
@@ -152,7 +162,7 @@ if __name__ == "__main__":
         z = fwd(tp, a)
         logp = torch.log_softmax(z @ Wout + bout, dim=1)
         loss = -(alvo(b, V_) * logp).sum(1).mean()
-        if WARMUP:
+        if WARMUP and not INICIO:
             for g_ in opt.param_groups:
                 g_["lr"] = LR * min(1.0, passo / WARMUP)
         opt.zero_grad(); loss.backward(); opt.step()
@@ -160,6 +170,8 @@ if __name__ == "__main__":
             r_real = avalia(tp, Wout.detach(), bout.detach(), Ate, Bte)
             r_ctrl = avalia(tp, Wout.detach(), bout.detach(), Ate, Bte, ctrl=True)
             print(f"passo {passo} loss {loss.item():.3f} recall@50 real {r_real:.4f} controle {r_ctrl:.4f} prior {r_prior:.4f} t={time.time()-t0:.0f}s", flush=True)
+            with open(os.path.join(SAIDA, "historico.jsonl"), "a") as hf:
+                hf.write(json.dumps({"passo": PASSO_BASE + passo, "real": r_real, "controle": r_ctrl}) + "\n")
     Ate_p = perturba(Ate)
     r_pert = avalia(tp, Wout.detach(), bout.detach(), Ate_p, Bte)
     print(f"frase alterada (mesmo tema, palavras tiradas/trocadas): recall@50 {r_pert:.4f} (original {r_real:.4f}, outro assunto {r_ctrl:.4f})", flush=True)

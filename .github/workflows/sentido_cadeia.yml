@@ -1,0 +1,104 @@
+name: sentido-cadeia
+
+# Cadeia do motor de sentido: versão escolhida = olhar 3 frases + resumo com peso (atenção).
+# Cada elo treina N passos a partir dos pesos do elo anterior, sobe os pesos e o histórico,
+# decide se continua (platô ou limite de passos) e dispara o próximo elo sozinho. Máx. 4 elos.
+
+on:
+  workflow_dispatch:
+    inputs:
+      elo:
+        description: "Número do elo (1 a 4)"
+        default: "1"
+        required: false
+      origem:
+        description: "run_id do elo anterior (vazio no primeiro elo)"
+        default: ""
+        required: false
+      passo_base:
+        description: "Passos já feitos em elos anteriores"
+        default: "0"
+        required: false
+      passos:
+        description: "Passos neste elo"
+        default: "20000"
+        required: false
+      max_total:
+        description: "Limite total de passos da cadeia"
+        default: "80000"
+        required: false
+
+permissions:
+  contents: read
+  actions: write
+
+jobs:
+  elo:
+    runs-on: ubuntu-latest
+    timeout-minutes: 340
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Instala dependências
+        run: pip install pyarrow numpy torch --index-url https://download.pytorch.org/whl/cpu --extra-index-url https://pypi.org/simple
+      - name: Prepara Wikipédia pt
+        run: python3 -I grande/prepara.py dados_escala
+      - name: Acrescenta livros PD
+        env:
+          MAX_LIVROS_PALAVRAS: "150000000"
+        run: python3 -I escala/prepara_livros.py dados_escala
+      - name: Recupera o elo anterior
+        if: inputs.origem != ''
+        uses: actions/download-artifact@v4
+        with:
+          name: sentido-cadeia-${{ inputs.origem }}
+          path: anterior
+          run-id: ${{ inputs.origem }}
+          github-token: ${{ github.token }}
+      - name: Treina o elo
+        env:
+          ARM: CADEIA_E${{ inputs.elo }}
+          POOL: att
+          CTX: "3"
+          LOTE: "128"
+          WARMUP: "2000"
+          EVAL_CADA: "5000"
+          PASSOS: ${{ inputs.passos }}
+          PASSO_BASE: ${{ inputs.passo_base }}
+          DADOS: ${{ github.workspace }}/dados_escala
+          SAIDA: ${{ github.workspace }}/saida_cadeia
+        working-directory: escala
+        run: |
+          mkdir -p "$SAIDA"
+          if [ -n "${{ inputs.origem }}" ]; then
+            cp "$GITHUB_WORKSPACE/anterior/historico.jsonl" "$SAIDA/" || true
+            export INICIO="$GITHUB_WORKSPACE/anterior/sentido.npz"
+          fi
+          python3 -u treina_sentido.py
+      - name: Decide se continua
+        working-directory: escala
+        run: python3 decide_elo.py "$GITHUB_WORKSPACE/saida_cadeia/historico.jsonl" $(( ${{ inputs.passo_base }} + ${{ inputs.passos }} )) ${{ inputs.max_total }} "$GITHUB_WORKSPACE/saida_cadeia/estado.txt"
+      - name: Sobe pesos e histórico do elo
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sentido-cadeia-${{ github.run_id }}
+          path: saida_cadeia/
+          retention-days: 30
+      - name: Dispara o próximo elo
+        if: success()
+        run: |
+          if grep -q continua "$GITHUB_WORKSPACE/saida_cadeia/estado.txt" && [ "${{ inputs.elo }}" -lt 4 ]; then
+            PROX=$(( ${{ inputs.elo }} + 1 ))
+            NOVO_BASE=$(( ${{ inputs.passo_base }} + ${{ inputs.passos }} ))
+            gh api -X POST repos/${{ github.repository }}/actions/workflows/sentido_cadeia.yml/dispatches \
+              -f ref=main -f "inputs[elo]=$PROX" -f "inputs[origem]=${{ github.run_id }}" \
+              -f "inputs[passo_base]=$NOVO_BASE" -f "inputs[passos]=${{ inputs.passos }}" -f "inputs[max_total]=${{ inputs.max_total }}"
+            echo "elo $PROX disparado"
+          else
+            echo "cadeia terminou"
+          fi
